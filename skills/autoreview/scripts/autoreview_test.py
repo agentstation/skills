@@ -738,7 +738,7 @@ class AutoreviewCompatibilityTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("outside the AgentStation autoreview policy", result.stderr)
+            self.assertIn("Cursor read permissions", result.stderr)
             self.assertFalse(record_path.exists())
 
 

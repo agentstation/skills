@@ -1,57 +1,44 @@
 ---
 name: autoreview
-description: Run an isolated second-model review of a local, branch, or commit diff when the user explicitly asks for autoreview or a pre-ship review.
-disable-model-invocation: true
+description: Run an isolated second-model review immediately before publishing a PR with substantive code changes, at a configured plan checkpoint, or when the user explicitly requests autoreview.
 ---
 
 # Autoreview
 
-Run the bundled helper as an advisory closeout review. It builds and scans the
+Use the bundled helper as an advisory closeout gate. It freezes and scans the
 review bundle, isolates the reviewer from repository instructions and host
 files, validates structured findings, and stops after one clean result.
 
-This AgentStation skill is derived from
-[`openclaw/agent-skills`](https://github.com/openclaw/agent-skills/tree/main/skills/autoreview).
-Its model policy is intentionally narrower.
+## Pre-PR gate
 
-## Model policy
-
-Use exactly one of:
-
-- Codex: `gpt-5.6-sol`, `high` effort by default.
-- Claude: `claude-opus-5`, `high` effort by default.
-
-Use `xhigh` for a review whose correctness depends on architecture, concurrency,
-cryptography, security boundaries, migrations, protocols, public APIs, or a
-large cross-module change. The helper rejects other engines, models, effort
-levels, and fallback chains. In particular, this review lane does not use
-Fable.
-
-## Run
-
-Set the helper path once:
+When an agent is about to push or publish a PR, finish verification and commit
+the intended change, then run:
 
 ```bash
 export AUTOREVIEW="${AGENTS_HOME:-$HOME/.agents}/skills/autoreview/scripts/autoreview"
+"$AUTOREVIEW" --gate pre-pr --mode auto
 ```
 
-Choose the reviewer:
+The default cadence is exactly this pre-PR checkpoint. It reviews the complete
+branch diff and exits successfully without a model call when the PR changes
+only documentation, configuration, metadata, generated files, or locks. A dirty
+worktree fails the pre-PR gate because it would make the branch review
+incomplete.
+
+If an accepted finding changes code, verify and commit the fix, then rerun the
+gate before publishing the PR.
+
+## Configured checkpoints
+
+Global and repository config can move the automatic cadence to `item`, `task`,
+`phase`, or `step`. At that plan boundary, run the matching gate:
 
 ```bash
-# Default: GPT-5.6 Sol, high
-"$AUTOREVIEW" --mode auto
-
-# Complex review: GPT-5.6 Sol, xhigh
-"$AUTOREVIEW" --mode auto --thinking xhigh
-
-# Opus 5, high
-"$AUTOREVIEW" --mode auto --engine claude
-
-# Opus 5, xhigh
-"$AUTOREVIEW" --mode auto --engine claude --thinking xhigh
+"$AUTOREVIEW" --gate phase --mode auto
 ```
 
-Target explicitly when auto-selection is not appropriate:
+The helper skips mismatched checkpoints and non-code-only automatic
+checkpoints. A manual request always runs regardless of cadence:
 
 ```bash
 "$AUTOREVIEW" --mode local
@@ -59,55 +46,62 @@ Target explicitly when auto-selection is not appropriate:
 "$AUTOREVIEW" --mode commit --commit HEAD
 ```
 
-Use `--prompt`, a repository-relative `--prompt-file`, or repository-relative
-`--dataset` for extra review criteria. Use `--dry-run` to inspect target and
-reviewer selection without invoking a model.
+Read [`CONFIG.md`](CONFIG.md) when adding a global, repository, or profile
+configuration.
+
+## Reviewer selection
+
+With no explicit reviewer, the `auto` profile scores configured candidates,
+keeps only installed isolation-safe harnesses, and avoids recursively invoking
+the current host agent. The built-in profiles are:
+
+```bash
+"$AUTOREVIEW" --profile sol
+"$AUTOREVIEW" --profile opus
+"$AUTOREVIEW" --profile cross-lab
+"$AUTOREVIEW" --profile budget
+"$AUTOREVIEW" --profile fable
+```
+
+Fable is available only through an explicit profile or model request and is
+never selected automatically or used as a fallback. Built-in Claude policy caps
+effort at `high`; a config can consciously change that cap. Other supported
+models and harnesses can be registered as candidates in config.
+
+Read [`MODEL_SELECTION.md`](MODEL_SELECTION.md) when changing score axes,
+candidate defaults, effort policy, or benchmark inputs.
 
 ## Findings
 
-- Treat findings as advisory and verify each against the real code path.
+- Verify each advisory finding against the real code path.
 - Accept concrete defects introduced by the reviewed change.
 - Reject speculative edge cases, unrelated cleanup, and broad redesigns.
 - Keep fixes inside the original task, changed owner boundary, and public
   contract.
-- If an accepted finding changes code, rerun focused tests and one review.
-- Stop on a clean helper exit. Do not add another reviewer merely to reconfirm.
+- Stop on a clean helper exit. Add another reviewer only when the selected
+  profile requires one.
 
-The default threshold is P0. Widen it only when the user asks:
+The default threshold is P0. Widen it only when requested:
 
 ```bash
 "$AUTOREVIEW" --max-priority P1
 ```
 
-## Scope breaks
+Pause and report when a finding requires a new protocol, schema, storage layout,
+public API, release process, or owner boundary, or when two review-triggered
+patch cycles have not converged.
 
-Pause and report instead of patching when a finding requires a new protocol,
-schema, storage layout, public API, release process, or owner boundary. Also
-pause when two review-triggered patch cycles have not converged or the review
-would more than double the original files or non-test LOC.
+## Safety
 
-## Safety and isolation
-
-- The helper runs TruffleHog against the exact changed content before model
-  invocation and fails closed on verified or unknown credentials.
-- Codex receives the validated bundle in an empty read-only workspace with user
-  config and repository rules disabled.
-- Claude runs in safe mode from an empty workspace with project skills, hooks,
-  plugins, MCP servers, memory, filesystem, and shell access disabled.
-- Explicit prompt and dataset inputs must remain inside the reviewed repository.
+- TruffleHog scans the exact changed content before model invocation and fails
+  closed on verified or unknown credentials.
+- Codex receives the bundle in an empty read-only workspace with user config
+  and repository rules disabled.
+- Claude runs in safe mode with project skills, hooks, plugins, MCP servers,
+  memory, filesystem, and shell access disabled.
+- Explicit prompt, dataset, and repository config inputs remain inside the
+  reviewed repository unless the user passes a trusted config path.
 - The helper never pushes, commits, or mutates the reviewed repository.
 
-Large safe bundles are split into bounded complete passes and merged before the
-exit decision. Heartbeats indicate a healthy long-running review; allow up to
-30 minutes while they continue.
-
-## Result
-
-Report:
-
-- command and reviewer used;
-- focused tests or other proof;
-- accepted and rejected findings, briefly;
-- final clean result, or the consciously rejected remaining finding.
-
-Do not run another review solely to improve report wording.
+Report the selected profile/reviewer, focused proof, accepted and rejected
+findings, and the final clean result or consciously rejected remaining finding.

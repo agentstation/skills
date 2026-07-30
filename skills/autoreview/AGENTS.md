@@ -7,7 +7,11 @@
 - Keep repository-specific criteria out of this skill. Profiles such as Nimbus
   belong in their owning repository and invoke this helper with explicit
   criteria.
-- The executable policy must reject every reviewer except `gpt-5.6-sol` and
-  `claude-opus-5`, and every effort except `high` and `xhigh`.
+- Keep Fable explicit-only and unavailable to automatic selection or fallback.
+- Keep built-in Claude effort at or below `high`; higher caps must be conscious
+  configuration.
+- Keep the default automatic cadence at the substantive-code pre-PR gate.
+- Update `MODEL_SELECTION.md` whenever built-in scores or benchmark inputs
+  change.
 - Run the helper self-tests, Python tests, and repository skill validator after
   every change.

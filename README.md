@@ -4,8 +4,8 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 
 ## Skills
 
-- `autoreview`: isolated, structured second-model code review using GPT-5.6 Sol
-  or Claude Opus 5.
+- `autoreview`: isolated, structured second-model review with layered model
+  profiles and a substantive-code pre-PR gate.
 
 Install globally with the shared canonical directory:
 

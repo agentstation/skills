@@ -1,0 +1,20 @@
+version = 1
+default_profile = "auto"
+
+[automation]
+cadence = "pre-pr"
+substantive_only = true
+
+[policy]
+avoid_same_host = true
+anthropic_max_effort = "high"
+
+[profiles.security-panel]
+candidates = ["sol", "opus5"]
+
+# Override owner-effective scores without copying the built-in candidate.
+[candidates.sol]
+cost = 9
+intelligence = 9
+taste = 8.5
+deepswe_pass_rate = 69

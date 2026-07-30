@@ -81,6 +81,110 @@ class AutoreviewHardeningTests(unittest.TestCase):
     def setUp(self) -> None:
         self.helper = load_helper()
 
+    def test_auto_profile_uses_best_available_opposite_host_reviewer(self) -> None:
+        config = self.helper["deep_merge_review_config"](
+            self.helper["BUILTIN_REVIEW_CONFIG"],
+            {},
+        )
+        args = argparse.Namespace(
+            codex_bin="codex",
+            claude_bin="claude",
+            pi_bin="pi",
+        )
+        globals_dict = self.helper["scored_candidates"].__globals__
+        with mock.patch.dict(
+            globals_dict,
+            {
+                "engine_binary": lambda _args, engine: f"/trusted/{engine}",
+                "detected_host_engine": lambda: "codex",
+            },
+        ):
+            selected = self.helper["select_profile_candidates"](
+                config,
+                args,
+                "auto",
+                profile_explicit=False,
+            )
+
+        self.assertEqual([item[0] for item in selected], ["opus5"])
+
+    def test_fable_profile_is_explicit_only(self) -> None:
+        config = self.helper["deep_merge_review_config"](
+            self.helper["BUILTIN_REVIEW_CONFIG"],
+            {},
+        )
+        args = argparse.Namespace(
+            codex_bin="codex",
+            claude_bin="claude",
+            pi_bin="pi",
+        )
+        globals_dict = self.helper["select_profile_candidates"].__globals__
+        with mock.patch.dict(
+            globals_dict,
+            {"engine_binary": lambda _args, engine: f"/trusted/{engine}"},
+        ):
+            with self.assertRaisesRegex(SystemExit, "explicit-only"):
+                self.helper["select_profile_candidates"](
+                    config,
+                    args,
+                    "fable",
+                    profile_explicit=False,
+                )
+            selected = self.helper["select_profile_candidates"](
+                config,
+                args,
+                "fable",
+                profile_explicit=True,
+            )
+
+        self.assertEqual([item[0] for item in selected], ["fable5"])
+
+    def test_anthropic_effort_cap_applies_through_other_harnesses(self) -> None:
+        args = argparse.Namespace(
+            review_policy={"anthropic_max_effort": "high"},
+            fable_explicit=True,
+        )
+        reviewer = argparse.Namespace(
+            engine="pi",
+            model="anthropic/claude-opus-5",
+            thinking="xhigh",
+            fallback_model=None,
+        )
+
+        with self.assertRaisesRegex(SystemExit, "exceeds the configured"):
+            self.helper["enforce_reviewer_policy"]([reviewer], args)
+
+    def test_fable_cannot_enter_an_automatic_fallback_chain(self) -> None:
+        args = argparse.Namespace(
+            review_policy={"anthropic_max_effort": "high"},
+            fable_explicit=True,
+        )
+        reviewer = argparse.Namespace(
+            engine="claude",
+            model="claude-opus-5",
+            thinking="high",
+            fallback_model="claude-opus-4-8,claude-fable-5",
+        )
+
+        with self.assertRaisesRegex(SystemExit, "cannot be a fallback"):
+            self.helper["enforce_reviewer_policy"]([reviewer], args)
+
+    def test_substantive_code_classifier_skips_docs_config_and_locks(self) -> None:
+        paths = {
+            "README.md",
+            "docs/design.md",
+            ".github/workflows/ci.yml",
+            "package-lock.json",
+            "vite.config.ts",
+            "src/review.ts",
+            "migrations/001_add_index.sql",
+        }
+
+        self.assertEqual(
+            self.helper["substantive_code_paths"](paths),
+            {"src/review.ts", "migrations/001_add_index.sql"},
+        )
+
     def test_trufflehog_missing_binary_has_platform_neutral_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repo = init_repo(Path(tempdir))
