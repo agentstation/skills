@@ -193,6 +193,96 @@ class AutoreviewHardeningTests(unittest.TestCase):
 
         self.assertEqual([item[0] for item in selected], ["fable5"])
 
+    def test_fable_approval_accepts_only_explicit_fable_selectors(self) -> None:
+        candidate = self.helper["BUILTIN_REVIEW_CONFIG"]["candidates"]["fable5"]
+        selected = [
+            (
+                "fable5",
+                candidate,
+                self.helper["candidate_score"](candidate),
+            )
+        ]
+        base = {
+            "cli_profile_explicit": False,
+            "cli_model_explicit": False,
+            "cli_reviewers_explicit": False,
+            "model": None,
+            "reviewers": None,
+        }
+
+        with mock.patch.object(
+            sys,
+            "argv",
+            [
+                "autoreview",
+                "--prompt",
+                "mention fable without selecting it",
+                "--config",
+                "fable-policy.toml",
+            ],
+        ):
+            self.assertFalse(
+                self.helper["explicit_fable_approval"](
+                    argparse.Namespace(**base),
+                    selected,
+                )
+            )
+        self.assertFalse(
+            self.helper["explicit_fable_approval"](
+                argparse.Namespace(
+                    **{
+                        **base,
+                        "cli_model_explicit": True,
+                        "model": ["claude=claude-opus-5"],
+                    }
+                ),
+                selected,
+            )
+        )
+        self.assertFalse(
+            self.helper["explicit_fable_approval"](
+                argparse.Namespace(
+                    **{
+                        **base,
+                        "cli_reviewers_explicit": True,
+                        "reviewers": "claude",
+                    }
+                ),
+                selected,
+            )
+        )
+
+        self.assertTrue(
+            self.helper["explicit_fable_approval"](
+                argparse.Namespace(**{**base, "cli_profile_explicit": True}),
+                selected,
+            )
+        )
+        self.assertTrue(
+            self.helper["explicit_fable_approval"](
+                argparse.Namespace(
+                    **{
+                        **base,
+                        "cli_model_explicit": True,
+                        "model": ["claude=claude-fable-5"],
+                    }
+                ),
+                [],
+            )
+        )
+        self.assertTrue(
+            self.helper["explicit_fable_approval"](
+                argparse.Namespace(
+                    **{
+                        **base,
+                        "cli_reviewers_explicit": True,
+                        "reviewers": "claude:claude-fable-5:high",
+                    }
+                ),
+                [],
+            )
+        )
+
     def test_lower_literal_cost_scores_higher(self) -> None:
         candidate = {
             "intelligence": 8,
@@ -1523,6 +1613,65 @@ class AutoreviewHardeningTests(unittest.TestCase):
             )
 
         self.assertTrue(prompt.endswith(bundle))
+
+    def test_review_prompt_requests_all_priorities_without_reverification(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            prompt = self.helper["render_review_prompt"](
+                repo,
+                "commit",
+                "HEAD",
+                self.helper["ReviewChunk"]("# Commit Diff\n+safe change\n"),
+                "",
+                "",
+            )
+
+        priority_description = self.helper["SCHEMA"]["properties"]["findings"][
+            "items"
+        ]["properties"]["priority"]["description"]
+        for priority in ("P0:", "P1:", "P2:", "P3:"):
+            self.assertIn(priority, priority_description)
+            self.assertIn(priority, prompt)
+        self.assertIn("Output filtering occurs after review", prompt)
+        self.assertNotIn("sweep the bundle once more", prompt)
+        self.assertNotIn(
+            "Finding threshold: report only",
+            SCRIPT.read_text(encoding="utf-8"),
+        )
+
+    def test_documented_selection_scores_match_executable_formula(self) -> None:
+        model_selection = SCRIPT.parents[1] / "MODEL_SELECTION.md"
+        rows: dict[tuple[str, str], list[str]] = {}
+        for line in model_selection.read_text(encoding="utf-8").splitlines():
+            if not line.startswith("| "):
+                continue
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if len(cells) != 11 or cells[0] in {"model", "---"}:
+                continue
+            rows[(cells[0], cells[7])] = cells
+
+        expected_rows = {
+            ("Fable 5", "high"),
+            ("GPT-5.6 Sol", "xhigh"),
+            ("GPT-5.6 Sol", "high"),
+            ("Opus 5", "high"),
+            ("GPT-5.6 Terra", "max"),
+            ("Opus 5", "medium"),
+            ("GPT-5.6 Luna", "max"),
+        }
+        self.assertEqual(set(rows), expected_rows)
+        for cells in rows.values():
+            avg_cost = float(cells[9].removeprefix("$"))
+            candidate = {
+                "intelligence": float(cells[2]),
+                "taste": float(cells[3]),
+                "deepswe_pass_rate": float(cells[4].removesuffix("%")),
+                "cost": round(10 * avg_cost / 9.18, 1),
+            }
+            self.assertEqual(
+                cells[5],
+                f"{self.helper['candidate_score'](candidate):.2f}",
+            )
 
     def test_review_pass_count_is_bounded(self) -> None:
         builder = self.helper["build_review_prompts"]

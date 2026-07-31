@@ -65,11 +65,12 @@ the current host agent. The built-in profiles are:
 ```
 
 Opus 5 high is the default Claude-side code reviewer. Fable requires manual
-approval through an explicit profile or model request, is reserved for
-architectural review, architectural planning, or orchestration, and is never
-selected for routine automatic code review or used as a fallback. Built-in
-Claude policy caps effort at `high`; a config can consciously change that cap.
-Other supported models and harnesses can be registered as candidates in config.
+approval through an explicit CLI profile, model, or reviewer request; reserve it
+for architecture-sensitive or exceptionally complex change review. Fable is
+never selected automatically, approved by config or environment defaults, or
+used as a fallback. Built-in Claude policy caps effort at `high`; a config can
+consciously change that cap. Other supported models and harnesses can be
+registered as candidates in config.
 
 Read [`MODEL_SELECTION.md`](MODEL_SELECTION.md) when changing score axes,
 candidate defaults, effort policy, or benchmark inputs.
@@ -84,7 +85,9 @@ candidate defaults, effort policy, or benchmark inputs.
 - Stop on a clean helper exit. Add another reviewer only when the selected
   profile requires one.
 
-The default threshold is P0. Widen it only when requested:
+The reviewer classifies every concrete actionable defect from P0 through P3;
+deterministic post-processing then applies the requested output threshold. The
+default threshold is P0. Widen it only when requested:
 
 ```bash
 "$AUTOREVIEW" --max-priority P1

@@ -16,7 +16,7 @@ candidates = ["sol", "opus5"]
 [candidates.sol]
 manual_approval_required = false
 cost = 3.8
-intelligence = 9
-taste = 8.5
+intelligence = 8.5
+taste = 8
 deepswe_pass_rate = 69
 deepswe_avg_cost_usd = 3.47

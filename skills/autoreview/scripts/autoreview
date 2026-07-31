@@ -803,7 +803,6 @@ THINKING_LEVELS_BY_ENGINE = {
     "cursor": set(),
 }
 SAFE_AUTOMATIC_ENGINES = {"codex", "claude", "pi"}
-FABLE_MODELS = {"claude-fable-5", "fable"}
 REVIEW_CADENCES = ("manual", "pre-pr", "item", "task", "phase", "step")
 SUBSTANTIVE_CODE_SUFFIXES = {
     ".bash",
@@ -1002,7 +1001,18 @@ SCHEMA: dict[str, Any] = {
                 "properties": {
                     "title": {"type": "string", "minLength": 1, "maxLength": 140},
                     "body": {"type": "string", "minLength": 1, "maxLength": 2000},
-                    "priority": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+                    "priority": {
+                        "type": "string",
+                        "enum": ["P0", "P1", "P2", "P3"],
+                        "description": (
+                            "P0: catastrophic or pervasive failure with no safe "
+                            "workaround; P1: serious high-impact defect likely in "
+                            "normal use; P2: concrete correctness defect in a "
+                            "narrower realistic scenario; P3: low-impact but "
+                            "actionable defect. Never use a priority for style, "
+                            "preference, or speculative risk."
+                        ),
+                    },
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "category": {
                         "type": "string",
@@ -1028,6 +1038,10 @@ SCHEMA: dict[str, Any] = {
         "overall_confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
 }
+
+
+def model_is_fable(model: object) -> bool:
+    return isinstance(model, str) and "fable" in model.casefold()
 
 
 def run(
@@ -9151,8 +9165,9 @@ def review_scope_policy() -> str:
         Review scope discipline:
         - This helper is a closeout gate. Do not turn a narrow patch into a broad
           redesign request.
-        - Report a finding only when this diff introduces or exposes a concrete
-          defect that must be fixed before this target can land.
+        - Report a finding only when this diff introduces or exposes a concrete,
+          actionable defect. Assign its priority using the schema rubric;
+          deterministic post-processing applies the caller's display threshold.
         - If the best fix requires a new protocol, config, storage, public API,
           release process, migration, owner-boundary move, or canonical contract,
           say that directly in the finding and keep the finding tied to the
@@ -9160,8 +9175,8 @@ def review_scope_policy() -> str:
         - Do not ask for sibling-surface hardening, cleanup, refactors, or
           follow-up architecture work unless the current diff is incorrect
           without that work.
-        - Prefer the smallest correct pre-merge fix. A broader ideal design is
-          not an actionable finding unless the current patch cannot safely land.
+        - Prefer the smallest correct fix. A broader ideal design is not an
+          actionable finding unless the current patch remains defective without it.
         - If this is release-branch or release-process work, apply freeze
           discipline. Report only release blockers, exact backport regressions,
           install/upgrade breakage, crashes, data loss, concrete security
@@ -9566,8 +9581,7 @@ def render_review_prompt(
         - Shell commands, if available, must be read-only inspection commands. Do not run tests, formatters, package installs, generators, network mutation commands, git mutation commands, or commands that write files.
         - Report only actionable defects introduced or exposed by this change.
         - Prefer high-signal findings over style feedback.
-        - Report EVERY distinct actionable defect in this single pass, ordered most severe first. Each review round costs the caller a full fix-test-review cycle; withholding a known defect until a later round wastes one.
-        - Before returning, sweep the bundle once more for independent defects in other files or failure modes that you may have stopped scanning for after an earlier find.
+        - Report EVERY distinct concrete actionable defect in this single pass, ordered most severe first. Output filtering occurs after review, so do not suppress a finding based on a presumed caller threshold. Each review round costs the caller a full fix-test-review cycle; withholding a known defect until a later round wastes one.
         - Include security findings: injection, secret leaks, authz/authn bypass, path traversal, unsafe deserialization, unsafe filesystem or shell use, privacy leaks, and credential handling.
         - Do not reject legitimate functionality merely because it touches shell, filesystem, network, auth, or sensitive data. Report a security finding only when the patch creates a concrete exploitable risk, removes an important safety check, or lacks validation at a trust boundary.
         - Security-sensitive bundle material may be redacted or omitted before review. Continue reviewing the material that is present. A redaction notice is not itself a defect and does not prove either safety or vulnerability in the omitted material.
@@ -9939,7 +9953,7 @@ def ensure_claude_isolation_supported(args: argparse.Namespace, repo: Path) -> N
     temp_root = safe_temp_root(repo)
     result = run([claude_bin, "--version"], temp_root, check=False, env=engine_env)
     selected_models = [args.model, *(getattr(args, "fallback_model", "") or "").split(",")]
-    uses_fable = any(model in {"claude-fable-5", "fable"} for model in selected_models)
+    uses_fable = any(model_is_fable(model) for model in selected_models)
     minimum_version = CLAUDE_FABLE_MIN_VERSION if uses_fable else CLAUDE_SAFE_MODE_MIN_VERSION
     version_reason = "for claude-fable-5" if uses_fable else "for --safe-mode"
     if result.returncode != 0:
@@ -12158,11 +12172,7 @@ def validate_review_config(config: dict[str, Any]) -> None:
             raise SystemExit(
                 f"candidate {name!r} deepswe_avg_cost_usd must be non-negative"
             )
-        if (
-            isinstance(model, str)
-            and "fable" in model.casefold()
-            and not candidate_requires_manual_approval(candidate)
-        ):
+        if model_is_fable(model) and not candidate_requires_manual_approval(candidate):
             raise SystemExit(
                 f"candidate {name!r} uses Fable and must set "
                 "manual_approval_required = true"
@@ -12354,6 +12364,39 @@ def select_profile_candidates(
     return selected
 
 
+def explicit_fable_approval(
+    args: argparse.Namespace,
+    selected: list[tuple[str, dict[str, Any], float]],
+) -> bool:
+    if getattr(args, "cli_profile_explicit", False) and any(
+        model_is_fable(item[1].get("model"))
+        for item in selected
+    ):
+        return True
+
+    if getattr(args, "cli_model_explicit", False):
+        global_model, models_by_engine = parse_keyed_options(args.model, "model")
+        if any(
+            model_is_fable(model)
+            for model in [global_model, *models_by_engine.values()]
+        ):
+            return True
+
+    if getattr(args, "cli_reviewers_explicit", False):
+        tokens = [
+            token.strip()
+            for token in str(args.reviewers or "").split(",")
+            if token.strip()
+        ]
+        if tokens != ["all"]:
+            for token in tokens:
+                _engine, inline_model, _thinking = parse_reviewer_token(token)
+                if model_is_fable(inline_model):
+                    return True
+
+    return False
+
+
 def configure_reviewers(
     args: argparse.Namespace,
     repo: Path,
@@ -12409,16 +12452,7 @@ def configure_reviewers(
     args.selection_scores = {item[0]: item[2] for item in selected}
     args.review_policy = config["policy"]
     args.review_automation = config["automation"]
-    args.fable_explicit = (
-        any("fable" in argument.lower() for argument in sys.argv[1:])
-        or (
-            profile_explicit
-            and any(
-                item[1].get("model") in FABLE_MODELS
-                for item in selected
-            )
-        )
-    )
+    args.fable_explicit = explicit_fable_approval(args, selected)
     return loaded_paths, profile_name
 
 
@@ -12558,6 +12592,7 @@ def parse_args() -> argparse.Namespace:
     args.cli_profile_explicit = cli_option_present("--profile")
     args.cli_engine_explicit = cli_option_present("--engine")
     args.cli_reviewers_explicit = cli_option_present("--reviewers")
+    args.cli_model_explicit = cli_option_present("--model")
     args.cli_panel_explicit = cli_option_present("--panel")
     args.engine = normalize_engine(args.engine)
     if args.cursor_allow_workspace_instructions is None:
@@ -12751,14 +12786,14 @@ def enforce_reviewer_policy(
     anthropic_max_rank = EFFORT_ORDER[anthropic_max]
     for reviewer in reviewers:
         model = str(reviewer.model or "")
-        if "fable" in model.lower() and not getattr(args, "fable_explicit", False):
+        if model_is_fable(model) and not getattr(args, "fable_explicit", False):
             raise SystemExit(
                 "Fable requires manual approval because its credits are scarce; "
                 "approve it with --profile fable or an explicit --model/--reviewers "
                 "value"
             )
         fallback_models = str(reviewer.fallback_model or "").split(",")
-        if any("fable" in fallback.lower() for fallback in fallback_models):
+        if any(model_is_fable(fallback) for fallback in fallback_models):
             raise SystemExit(
                 "Fable cannot be a fallback model because fallback invocation is automatic"
             )
@@ -13402,20 +13437,6 @@ def main() -> int:
         )
         target_ref = args.commit
     extra_prompt, prompt_truncated = load_extra_prompt(args, repo)
-    included_priorities = ", ".join(
-        priority
-        for priority in ("P0", "P1", "P2", "P3")
-        if int(priority[1]) <= int(args.max_priority[1])
-    )
-    threshold_prompt = (
-        f"Finding threshold: report only {included_priorities}. "
-        "Omit all lower-priority observations, polish, speculative risks, and "
-        "follow-up ideas outside that threshold. Do not mark the patch incorrect "
-        "solely for an omitted lower-priority issue."
-    )
-    extra_prompt = (
-        threshold_prompt + ("\n\n" + extra_prompt if extra_prompt.strip() else "")
-    )
     datasets, datasets_truncated = load_datasets(args, repo)
     input_truncated = bundle_truncated or prompt_truncated or datasets_truncated
     prompts = build_review_prompts(

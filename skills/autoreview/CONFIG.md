@@ -59,8 +59,8 @@ model = "claude-opus-5"
 effort = "high"
 manual_approval_required = false
 cost = 6.6
-intelligence = 9
-taste = 9
+intelligence = 8
+taste = 8.5
 deepswe_pass_rate = 73
 deepswe_avg_cost_usd = 6.08
 ```
@@ -84,12 +84,15 @@ Codex, Claude, and a sufficiently recent Pi CLI can be automatic candidates.
 Other bundled adapters fail closed until their CLIs can prove equivalent
 isolation.
 
-Fable candidates must set `manual_approval_required = true`. Approval is
-granted by an explicit `--profile`, `--model`, or `--reviewers` request. Fable
-is also refused in fallback chains because fallback invocation is automatic.
-The legacy `manual_approval`, `explicit_only`, and `automatic = false` fields
-remain recognized when reading older config, but new config should use
-`manual_approval_required`.
+Fable candidates must set `manual_approval_required = true`. Approval is granted
+only by an explicit CLI `--profile` whose selected candidates include Fable, an
+explicit CLI `--model` value naming Fable, or an inline Fable model in an
+explicit CLI `--reviewers` value. Scored profiles, config defaults, environment
+defaults, automatic gates, and unrelated command arguments cannot grant
+approval. Fable is also refused in fallback chains because fallback invocation
+is automatic. The legacy `manual_approval`, `explicit_only`, and
+`automatic = false` fields remain recognized when reading older config, but new
+config should use `manual_approval_required`.
 
 ## Policy
 
