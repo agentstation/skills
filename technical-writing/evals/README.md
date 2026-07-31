@@ -20,6 +20,8 @@ terms.
 
 Run each case in a clean context against the candidate and the previous version
 or no-skill baseline. Apply the hard gates and scoring rules in `rubric.md`.
+Use exact, case-sensitive substring checks for protected literals. Use the
+rubric's boundary-aware matching for forbidden literals.
 
 Do not commit one response as golden prose. Store run artifacts outside the
 skill directory. Record factual failures, terminology failures, linter results,

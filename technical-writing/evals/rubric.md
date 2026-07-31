@@ -30,4 +30,9 @@ Record evidence for each score. Name each failed invariant. Use deterministic
 checks for protected content, glossary aliases, parseability, limits, and
 ordering. Use human review for truth, completeness, meaning, and usefulness.
 
+Treat each `protected_literals` value as an exact, case-sensitive substring.
+Treat each `forbidden_literals` value as a case-insensitive whole term or
+phrase. Letters, numbers, underscores, and hyphens are term characters. Thus,
+`repo` matches `the repo` but not `repository`, `mono-repo`, or `repo-sync`.
+
 The linter score cannot replace the hard gates or human review.

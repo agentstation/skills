@@ -22,6 +22,7 @@ REQUIRED_CATEGORIES = {
     "structure",
     "terminology",
 }
+TERM_CHARACTERS = "A-Za-z0-9_-"
 
 
 def fail(message: str) -> None:
@@ -42,6 +43,25 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
             key, _, value = line.partition(":")
             fields[key.strip()] = value.strip().strip("\"'")
     return fields, "\n".join(lines[end + 1 :])
+
+
+def forbidden_literal_pattern(value: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"(?<![{TERM_CHARACTERS}]){re.escape(value)}(?![{TERM_CHARACTERS}])",
+        re.IGNORECASE,
+    )
+
+
+def literal_conflicts(
+    protected: list[str],
+    forbidden: list[str],
+) -> list[tuple[str, str]]:
+    return [
+        (protected_value, forbidden_value)
+        for protected_value in protected
+        for forbidden_value in forbidden
+        if forbidden_literal_pattern(forbidden_value).search(protected_value)
+    ]
 
 
 def validate_skill() -> None:
@@ -102,9 +122,12 @@ def validate_evals() -> None:
                 isinstance(value, str) and value for value in values
             ):
                 fail(f"{case_id}: {field} must be a list of non-empty strings")
-        overlap = set(case["protected_literals"]) & set(case["forbidden_literals"])
-        if overlap:
-            fail(f"{case_id}: protected and forbidden literals overlap: {overlap}")
+        conflicts = literal_conflicts(
+            case["protected_literals"],
+            case["forbidden_literals"],
+        )
+        if conflicts:
+            fail(f"{case_id}: protected and forbidden literals conflict: {conflicts}")
 
     missing = REQUIRED_CATEGORIES - categories
     if missing:

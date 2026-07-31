@@ -72,7 +72,7 @@
       "category": "terminology",
       "smoke": true,
       "prompt": "The project glossary approves \"repository\" and marks \"repo\" as an avoided alias. Write one sentence that tells the user to clone the repository.",
-      "expected_output": "A sentence that uses repository and does not use repo.",
+      "expected_output": "A sentence that uses repository and does not use repo as a standalone term.",
       "protected_literals": ["repository"],
       "forbidden_literals": ["repo"],
       "assertions": [
