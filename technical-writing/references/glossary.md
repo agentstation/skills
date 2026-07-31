@@ -6,6 +6,10 @@ glossary in `AGENTS.md`.
 This separation gives the glossary a stable, reviewable format. The linter can
 read it, and people can update it without changing agent instructions.
 
+Set `glossary.required = true` in `.agents/technical-writing.toml` after the
+project adopts its glossary. The linter then fails if `GLOSSARY.md` does not
+exist.
+
 ## AGENTS.md instruction
 
 Add a short project instruction:

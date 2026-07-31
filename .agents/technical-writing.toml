@@ -28,6 +28,7 @@ allowed = []
 
 [glossary]
 path = "GLOSSARY.md"
+required = true
 require_approved_definitions = true
 candidate_min_occurrences = 2
 ignored_candidates = [

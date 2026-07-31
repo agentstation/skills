@@ -48,8 +48,9 @@ failure. It exits with status `2` for invalid configuration or input.
 
 ## Terms
 
-`additional_banned` adds project-specific terms. `allowed` suppresses a
-mechanical term match when the term is technically required.
+`additional_banned` adds project-specific terms. `allowed` suppresses an exact,
+case-insensitive mechanical phrase match. List each required inflection. For
+example, allowing `ensure` does not also allow `ensures` or `ensuring`.
 
 Use the glossary for concept aliases. The linter applies avoided aliases from
 approved glossary rows. It does not apply aliases from draft rows.
@@ -63,6 +64,11 @@ resolves `GLOSSARY.md` from the repository root.
 The configured path must stay inside the project root. Use the explicit
 `--glossary` option when you intentionally need another path. The linter fails
 when that explicit path does not exist.
+
+Set `[glossary].required = true` in a project that enforces its glossary. A
+missing required glossary makes `lint` exit with status `2`. The built-in and
+example global configurations leave this setting `false`, so projects can use
+the writing rules before they create a glossary.
 
 The `[glossary]` table controls candidate discovery:
 

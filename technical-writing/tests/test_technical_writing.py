@@ -426,6 +426,22 @@ long_sentence = "error"
         self.assertEqual(result.returncode, 2)
         self.assertIn("explicit glossary does not exist", result.stderr)
 
+    def test_missing_required_glossary_is_an_input_error(self) -> None:
+        self.write_project_config(
+            """
+[glossary]
+path = "missing-glossary.md"
+required = true
+"""
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            input_text="The parser reads the file.",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("required glossary does not exist", result.stderr)
+
     def test_multiple_paths_and_glob_are_deduplicated(self) -> None:
         docs = self.project / "docs"
         docs.mkdir()
@@ -538,6 +554,21 @@ long_sentence = "error"
         self.assertEqual(avoided.returncode, 1, avoided.stdout + avoided.stderr)
         diagnostic = json.loads(avoided.stdout)["documents"][0]["diagnostics"][0]
         self.assertEqual(diagnostic["rule"], "glossary_term")
+
+    def test_glossary_alias_does_not_match_inside_hyphenated_compound(self) -> None:
+        self.write_glossary(
+            "| repository | A version-controlled tree. | repo | "
+            "Approved | README.md |\n"
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The mono-repo contains the package.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
 
     def test_glossary_check_rejects_unknown_status(self) -> None:
         self.write_glossary("| worker | A process. | | Maybe | src/worker.py |\n")
@@ -766,6 +797,25 @@ ignored_candidates = ["HiddenClient"]
         self.assertNotIn("HiddenClient", content)
         self.assertIn("VisibleClient", content)
 
+    def test_candidate_scan_does_not_count_terms_inside_hyphenated_compounds(
+        self,
+    ) -> None:
+        self.write_project_config(
+            """
+[glossary]
+candidate_min_occurrences = 2
+scan = ["README.md"]
+"""
+        )
+        (self.project / "README.md").write_text(
+            "NimbusClient-alpha NimbusClient-beta.\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("glossary", "init")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        content = (self.project / "GLOSSARY.md").read_text(encoding="utf-8")
+        self.assertNotIn("| NimbusClient |", content)
+
     def test_rule_can_be_disabled_and_allowed_term_suppresses_word_rule(self) -> None:
         self.write_project_config(
             """
@@ -781,6 +831,25 @@ allowed = ["robust"]
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_allowed_term_does_not_suppress_unlisted_inflections(self) -> None:
+        self.write_project_config(
+            """
+[terms]
+allowed = ["ensure"]
+"""
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The parser ensures consistent output.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["banned_word"])
+        self.assertIn("'ensures'", diagnostics[0]["message"])
 
 
 if __name__ == "__main__":

@@ -220,6 +220,7 @@ BUILTINS: dict[str, Any] = {
     "mode": "developer",
     "glossary": {
         "path": "GLOSSARY.md",
+        "required": False,
         "require_approved_definitions": True,
         "scan": [
             "README.md",
@@ -457,6 +458,9 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     require_definitions = glossary.get("require_approved_definitions")
     if not isinstance(require_definitions, bool):
         raise CliError("glossary.require_approved_definitions must be a boolean")
+    required = glossary.get("required")
+    if not isinstance(required, bool):
+        raise CliError("glossary.required must be a boolean")
     for key in ("scan", "exclude", "ignored_candidates"):
         value = glossary.get(key)
         if not isinstance(value, list) or not all(
@@ -600,7 +604,7 @@ def sentence_spans(text: str, start: int, end: int) -> list[tuple[int, int]]:
 
 def phrase_pattern(phrase: str, *, ignore_case: bool = True) -> re.Pattern[str]:
     return re.compile(
-        r"(?<![A-Za-z0-9_])" + re.escape(phrase) + r"(?![A-Za-z0-9_])",
+        r"(?<![A-Za-z0-9_-])" + re.escape(phrase) + r"(?![A-Za-z0-9_-])",
         re.IGNORECASE if ignore_case else 0,
     )
 
@@ -1056,6 +1060,8 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
     glossary = glossary_path(config, args.glossary)
     if args.glossary and not glossary.is_file():
         raise CliError(f"explicit glossary does not exist: {glossary}")
+    if config.data["glossary"]["required"] and not glossary.is_file():
+        raise CliError(f"required glossary does not exist: {glossary}")
     prohibited = glossary_prohibited_terms(
         glossary, config.data["glossary"]["require_approved_definitions"]
     )
@@ -1258,7 +1264,7 @@ def discover_terms(config: Config, glossary: Path) -> list[tuple[str, list[str]]
         for value in extract_candidates(path, text):
             occurrence_count = len(
                 re.findall(
-                    r"(?<![A-Za-z0-9_])" + re.escape(value) + r"(?![A-Za-z0-9_])",
+                    r"(?<![A-Za-z0-9_-])" + re.escape(value) + r"(?![A-Za-z0-9_-])",
                     text,
                 )
             )
