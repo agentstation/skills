@@ -44,15 +44,15 @@ cost break ties. Model and candidate ID come first so each row is identifiable.
 A layered configuration can retain the same candidate ID while overriding its
 effort and matching benchmark inputs.
 
-| model | candidate ID | intelligence | taste | harness | effort | when to use | DeepSWE pass | avg cost/task | cost | out tok | steps | manual approval required |
-| --- | --- | ---: | ---: | --- | :---: | --- | ---: | ---: | ---: | ---: | ---: | :---: |
-| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | high | Default automatic reviewer when the host is Codex | 73%±2% | $6.08 | 6.6 | 64k | 73 | no |
-| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | xhigh | Complex or high-risk review; Nimbus Codex candidate | 71%±1% | $4.70 | 5.1 | 41k | 44 | no |
-| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | medium | Layered Claude value override when cost matters | 69%±1% | $3.29 | 3.6 | 37k | 52 | no |
-| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | high | Default automatic reviewer when the host is Claude | 69%±1% | $3.47 | 3.8 | 28k | 37 | no |
-| Fable 5 | `fable5` | 9 | 9 | Claude Code CLI | high | Only when the user explicitly requests and approves Fable | 69%±1% | $9.18 | 10 | 57k | 59 | yes |
-| GPT-5.6 Terra | `terra` | 8 | 8 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | 70%±3% | $3.96 | 4.3 | 72k | 76 | no |
-| GPT-5.6 Luna | `luna` | 6 | 7 | Codex CLI | max | `budget` profile for low-cost or high-volume review | 67%±4% | $0.61 | 0.7 | 73k | 102 | no |
+| model | candidate ID | intelligence | taste | harness | effort | when to use | cost/task | manual approval required |
+| --- | --- | ---: | ---: | --- | :---: | --- | ---: | :---: |
+| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | high | Default automatic reviewer when the host is Codex | $6.08 | no |
+| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | xhigh | Complex or high-risk review; Nimbus Codex candidate | $4.70 | no |
+| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | medium | Layered Claude value override when cost matters | $3.29 | no |
+| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
+| Fable 5 | `fable5` | 9 | 9 | Claude Code CLI | high | Only when the user explicitly requests and approves Fable | $9.18 | yes |
+| GPT-5.6 Terra | `terra` | 8 | 8 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | $3.96 | no |
+| GPT-5.6 Luna | `luna` | 6 | 7 | Codex CLI | max | `budget` profile for low-cost or high-volume review | $0.61 | no |
 
 The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
 
