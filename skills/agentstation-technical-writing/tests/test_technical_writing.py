@@ -102,6 +102,17 @@ Run `leverage;` now.
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
 
+    def test_contraction_rule_reports_a_typographic_apostrophe(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="We can’t continue.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["contraction"])
+
     def test_lint_reports_each_required_surface_rule(self) -> None:
         self.write_project_config(
             """
@@ -221,13 +232,44 @@ long_sentence = "error"
         self.assertEqual([item["rule"] for item in diagnostics], ["long_sentence"])
         self.assertIn("limit is 3", diagnostics[0]["message"])
 
-    def test_global_project_and_explicit_configs_layer_in_order(self) -> None:
+    def test_wrapped_list_item_uses_the_instruction_limit(self) -> None:
+        self.write_project_config(
+            """
+[limits]
+instruction_words = 5
+descriptive_words = 50
+max_warnings_per_100_words = 100
+
+[rules]
+long_sentence = "error"
+"""
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                "1. Read the complete configuration\n"
+                "   before you run the command.\n"
+            ),
+        )
+        self.assertEqual(result.returncode, 1)
+        diagnostic = json.loads(result.stdout)["documents"][0]["diagnostics"][0]
+        self.assertEqual(diagnostic["rule"], "long_sentence")
+        self.assertIn("limit is 5", diagnostic["message"])
+
+    def test_explicit_config_replaces_project_discovery(self) -> None:
         user_config = self.home / ".config" / "agentstation" / "technical-writing.toml"
         user_config.parent.mkdir(parents=True)
         user_config.write_text('[rules]\nsemicolon = "off"\n', encoding="utf-8")
         self.write_project_config('[terms]\nadditional_banned = ["widget"]\n')
         explicit = self.root / "override.toml"
-        explicit.write_text('[rules]\nbanned_word = "error"\n', encoding="utf-8")
+        explicit.write_text(
+            '[rules]\nbanned_word = "error"\n'
+            '[terms]\nadditional_banned = ["gadget"]\n',
+            encoding="utf-8",
+        )
 
         result = self.run_cli(
             "lint",
@@ -236,14 +278,44 @@ long_sentence = "error"
             "json",
             "--config",
             str(explicit),
-            input_text="Use the widget;",
+            input_text="Use the widget and gadget;",
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(len(payload["config_sources"]), 3)
+        self.assertEqual(len(payload["config_sources"]), 2)
         diagnostics = payload["documents"][0]["diagnostics"]
         self.assertEqual([item["rule"] for item in diagnostics], ["banned_word"])
         self.assertEqual(diagnostics[0]["severity"], "error")
+        self.assertIn("gadget", diagnostics[0]["message"])
+
+    def test_external_config_keeps_glossary_resolution_in_the_project(self) -> None:
+        self.write_glossary(
+            "| worker | A process. | daemon | Approved | src/worker.py |\n"
+        )
+        explicit = self.root / "override.toml"
+        explicit.write_text('[rules]\nsemicolon = "off"\n', encoding="utf-8")
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            "--config",
+            str(explicit),
+            input_text="Start the daemon.",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["config_sources"], [str(explicit.resolve())])
+        self.assertEqual(
+            payload["documents"][0]["diagnostics"][0]["rule"],
+            "glossary_term",
+        )
+
+    def test_configured_glossary_cannot_escape_the_project_root(self) -> None:
+        self.write_project_config('[glossary]\npath = "../outside.md"\n')
+        result = self.run_cli("glossary", "check")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must stay inside the project root", result.stderr)
 
     def test_multiple_paths_and_glob_are_deduplicated(self) -> None:
         docs = self.project / "docs"

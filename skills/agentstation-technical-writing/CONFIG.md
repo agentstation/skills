@@ -9,6 +9,8 @@ The CLI reads TOML configuration in this order:
 
 Later layers override earlier layers. An explicit `--config` path replaces
 automatic project discovery. It still inherits the global configuration.
+The invocation directory remains the project root for relative glossary and
+scan paths.
 
 Copy `config.example.toml` to create a project configuration:
 
@@ -55,6 +57,9 @@ approved glossary rows. It does not apply aliases from draft rows.
 The `[glossary].path` value is relative to the project configuration
 directory's parent. The default `.agents/technical-writing.toml` therefore
 resolves `GLOSSARY.md` from the repository root.
+
+The configured path must stay inside the project root. Use the explicit
+`--glossary` option when you intentionally need another path.
 
 The `[glossary]` table controls candidate discovery:
 

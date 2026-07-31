@@ -473,8 +473,8 @@ def load_config(explicit: str | None, cwd: Path) -> Config:
             str(Path.home() / ".config" / "agentstation" / "technical-writing.toml"),
         )
     ).expanduser()
-    project_path = nearest_project_config(cwd)
     explicit_path = Path(explicit).expanduser().resolve() if explicit else None
+    project_path = None if explicit_path else nearest_project_config(cwd)
 
     project_root = cwd.resolve()
     for path in (user_path, project_path, explicit_path):
@@ -485,7 +485,7 @@ def load_config(explicit: str | None, cwd: Path) -> Config:
         layer = load_toml(path)
         data = deep_merge(data, layer)
         sources.append(path.resolve())
-        if path != user_path:
+        if path == project_path:
             project_root = project_root_for_config(path)
     return Config(normalize_config(data), tuple(sources), project_root)
 
@@ -534,18 +534,23 @@ def word_count(text: str) -> int:
 
 def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
     """Yield prose blocks without merging adjacent Markdown structures."""
-    structural = re.compile(r"^\s*(?:#{1,6}\s+|(?:[-*+]|\d+[.)])\s+|>\s*|\|)")
+    list_item = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+    standalone = re.compile(r"^\s*(?:#{1,6}\s+|\|)")
+    quote = re.compile(r"^\s*>\s*")
     lines = list(re.finditer(r".*(?:\n|\Z)", text))
     block_start: int | None = None
     block_end = 0
-    block_is_structural = False
+    block_accepts_continuation = True
 
     for match in lines:
         line = match.group(0)
         if not line:
             continue
         stripped = line.strip()
-        line_is_structural = bool(structural.match(line))
+        line_is_list_item = bool(list_item.match(line))
+        line_is_standalone = bool(standalone.match(line))
+        line_is_quote = bool(quote.match(line))
+        line_starts_block = line_is_list_item or line_is_standalone or line_is_quote
         if not stripped:
             if block_start is not None:
                 yield block_start, block_end
@@ -553,11 +558,11 @@ def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
             continue
         if block_start is None:
             block_start = match.start()
-            block_is_structural = line_is_structural
-        elif line_is_structural or block_is_structural:
+            block_accepts_continuation = not line_is_standalone
+        elif line_starts_block or not block_accepts_continuation:
             yield block_start, block_end
             block_start = match.start()
-            block_is_structural = line_is_structural
+            block_accepts_continuation = not line_is_standalone
         block_end = match.end()
 
     if block_start is not None:
@@ -625,8 +630,13 @@ def glossary_path(config: Config, override: str | None) -> Path:
         return path.resolve() if path.is_absolute() else (Path.cwd() / path).resolve()
     configured = Path(config.data["glossary"]["path"]).expanduser()
     if configured.is_absolute():
-        return configured.resolve()
-    return (config.project_root / configured).resolve()
+        raise CliError("glossary.path must be relative; use --glossary to override it")
+    resolved = (config.project_root / configured).resolve()
+    try:
+        resolved.relative_to(config.project_root)
+    except ValueError as exc:
+        raise CliError("glossary.path must stay inside the project root") from exc
+    return resolved
 
 
 def split_markdown_row(line: str) -> list[str]:
@@ -857,7 +867,7 @@ def lint_text(
             re.compile(
                 r"(?<![A-Za-z0-9_])(?:"
                 + "|".join(
-                    re.escape(item).replace(r"\'", "['’]") for item in CONTRACTIONS
+                    re.escape(item).replace("'", "['’]") for item in CONTRACTIONS
                 )
                 + r")(?![A-Za-z0-9_])",
                 re.IGNORECASE,
@@ -1180,6 +1190,7 @@ def extract_candidates(path: Path, text: str) -> set[str]:
         for pattern in (
             r"\b[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)+\b",
             r"(?<![-\w])[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)+(?![-\w])",
+            r"(?<![-\w])@[a-zA-Z0-9-]+/[a-zA-Z0-9-]+(?![-\w])",
         ):
             candidates.update(re.findall(pattern, text))
     else:
@@ -1207,18 +1218,13 @@ def discover_terms(config: Config, glossary: Path) -> list[tuple[str, list[str]]
     counts: Counter[str] = Counter()
     evidence: dict[str, set[str]] = defaultdict(set)
     display: dict[str, Counter[str]] = defaultdict(Counter)
-    documents: list[tuple[str, str]] = []
-    candidates: set[str] = set()
     for path in scan_files(config, glossary):
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
         relative = path.relative_to(config.project_root).as_posix()
-        documents.append((relative, text))
-        candidates.update(extract_candidates(path, text))
-    for value in candidates:
-        for relative, text in documents:
+        for value in extract_candidates(path, text):
             occurrence_count = len(
                 re.findall(
                     r"(?<![A-Za-z0-9_])" + re.escape(value) + r"(?![A-Za-z0-9_])",
