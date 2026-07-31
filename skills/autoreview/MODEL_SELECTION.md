@@ -40,17 +40,19 @@ cost. The table intentionally includes only useful review operating points, not
 every measured effort.
 
 Rows are ordered by owner intelligence score descending; pass rate and then
-cost break ties:
+cost break ties. Model and candidate ID come first so each row is identifiable.
+A layered configuration can retain the same candidate ID while overriding its
+effort and matching benchmark inputs.
 
-| intelligence | taste | harness | model | effort | DeepSWE pass | avg cost/task | out tok | steps | cost | manual approval required |
-| ---: | ---: | --- | --- | :---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 9 | 9 | Claude Code CLI | Opus 5 | high | 73%±2% | $6.08 | 64k | 73 | 6.6 | no |
-| 9 | 8.5 | Codex CLI | GPT-5.6 Sol | xhigh | 71%±1% | $4.70 | 41k | 44 | 5.1 | no |
-| 9 | 9 | Claude Code CLI | Opus 5 | medium | 69%±1% | $3.29 | 37k | 52 | 3.6 | no |
-| 9 | 8.5 | Codex CLI | GPT-5.6 Sol | high | 69%±1% | $3.47 | 28k | 37 | 3.8 | no |
-| 9 | 9 | Claude Code CLI | Fable 5 | high | 69%±1% | $9.18 | 57k | 59 | 10 | yes |
-| 8 | 8 | Codex CLI | GPT-5.6 Terra | max | 70%±3% | $3.96 | 72k | 76 | 4.3 | no |
-| 6 | 7 | Codex CLI | GPT-5.6 Luna | max | 67%±4% | $0.61 | 73k | 102 | 0.7 | no |
+| model | candidate ID | intelligence | taste | harness | effort | when to use | DeepSWE pass | avg cost/task | cost | out tok | steps | manual approval required |
+| --- | --- | ---: | ---: | --- | :---: | --- | ---: | ---: | ---: | ---: | ---: | :---: |
+| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | high | Default automatic reviewer when the host is Codex | 73%±2% | $6.08 | 6.6 | 64k | 73 | no |
+| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | xhigh | Complex or high-risk review; Nimbus Codex candidate | 71%±1% | $4.70 | 5.1 | 41k | 44 | no |
+| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | medium | Layered Claude value override when cost matters | 69%±1% | $3.29 | 3.6 | 37k | 52 | no |
+| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | high | Default automatic reviewer when the host is Claude | 69%±1% | $3.47 | 3.8 | 28k | 37 | no |
+| Fable 5 | `fable5` | 9 | 9 | Claude Code CLI | high | Only when the user explicitly requests and approves Fable | 69%±1% | $9.18 | 10 | 57k | 59 | yes |
+| GPT-5.6 Terra | `terra` | 8 | 8 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | 70%±3% | $3.96 | 4.3 | 72k | 76 | no |
+| GPT-5.6 Luna | `luna` | 6 | 7 | Codex CLI | max | `budget` profile for low-cost or high-volume review | 67%±4% | $0.61 | 0.7 | 73k | 102 | no |
 
 The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
 
