@@ -42,7 +42,8 @@ Each rule has one severity:
 - `error`: fail the lint command.
 
 The linter exits with status `0` when it finds no error and the warning density
-is within the configured limit. It exits with status `1` for a conformance
+of each document is within the configured limit. One failing document makes a
+multi-file invocation fail. The linter exits with status `1` for a conformance
 failure. It exits with status `2` for invalid configuration or input.
 
 ## Terms

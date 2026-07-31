@@ -390,6 +390,27 @@ long_sentence = "error"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["summary"]["files"], 2)
 
+    def test_multi_file_lint_fails_when_one_document_fails(self) -> None:
+        docs = self.project / "docs"
+        docs.mkdir()
+        (docs / "short.md").write_text(
+            "The tests are running. The builds are running.\n",
+            encoding="utf-8",
+        )
+        (docs / "long.md").write_text(
+            "\n\n".join("The parser reads the file." for _ in range(100)) + "\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", "docs", "--format", "json")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        by_name = {
+            Path(document["path"]).name: document for document in payload["documents"]
+        }
+        self.assertFalse(payload["passed"])
+        self.assertTrue(by_name["long.md"]["passed"])
+        self.assertFalse(by_name["short.md"]["passed"])
+
     def test_directory_lint_uses_markdown_structure_and_skips_executables(
         self,
     ) -> None:
@@ -448,6 +469,24 @@ long_sentence = "error"
             any("conflicts" in message for message in payload["errors"]),
             payload["errors"],
         )
+
+    def test_case_only_alias_enforces_the_approved_capitalization(self) -> None:
+        self.write_glossary(
+            "| JavaScript | The programming language. | Javascript | Approved | src/app.js |\n"
+        )
+        check = self.run_cli("glossary", "check")
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+        approved = self.run_cli(
+            "lint", "-", "--format", "json", input_text="Use JavaScript."
+        )
+        avoided = self.run_cli(
+            "lint", "-", "--format", "json", input_text="Use Javascript."
+        )
+        self.assertEqual(approved.returncode, 0, approved.stdout + approved.stderr)
+        self.assertEqual(avoided.returncode, 1, avoided.stdout + avoided.stderr)
+        diagnostic = json.loads(avoided.stdout)["documents"][0]["diagnostics"][0]
+        self.assertEqual(diagnostic["rule"], "glossary_term")
 
     def test_glossary_check_rejects_unknown_status(self) -> None:
         self.write_glossary("| worker | A process. | | Maybe | src/worker.py |\n")
@@ -574,6 +613,30 @@ exclude = ["ignored.md"]
         content = (self.project / "GLOSSARY.md").read_text(encoding="utf-8")
         self.assertNotIn("AlphaClient", content)
         self.assertNotIn("BetaClient", content)
+        self.assertNotIn("HiddenClient", content)
+
+    def test_candidate_scan_excludes_nested_vendor_directories(self) -> None:
+        self.write_project_config(
+            """
+[glossary]
+candidate_min_occurrences = 2
+scan = ["packages"]
+exclude = ["node_modules"]
+"""
+        )
+        source = self.project / "packages" / "app"
+        vendor = source / "node_modules" / "dependency"
+        vendor.mkdir(parents=True)
+        (source / "README.md").write_text(
+            "VisibleClient VisibleClient.\n", encoding="utf-8"
+        )
+        (vendor / "README.md").write_text(
+            "HiddenClient HiddenClient.\n", encoding="utf-8"
+        )
+        result = self.run_cli("glossary", "init")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        content = (self.project / "GLOSSARY.md").read_text(encoding="utf-8")
+        self.assertIn("VisibleClient", content)
         self.assertNotIn("HiddenClient", content)
 
     def test_candidate_scan_extracts_supported_term_shapes_and_package_names(

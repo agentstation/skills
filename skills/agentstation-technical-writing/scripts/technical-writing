@@ -598,10 +598,10 @@ def sentence_spans(text: str, start: int, end: int) -> list[tuple[int, int]]:
     return spans
 
 
-def phrase_pattern(phrase: str) -> re.Pattern[str]:
+def phrase_pattern(phrase: str, *, ignore_case: bool = True) -> re.Pattern[str]:
     return re.compile(
         r"(?<![A-Za-z0-9_])" + re.escape(phrase) + r"(?![A-Za-z0-9_])",
-        re.IGNORECASE,
+        re.IGNORECASE if ignore_case else 0,
     )
 
 
@@ -771,10 +771,17 @@ def validate_glossary(
             key = value.casefold()
             previous = names.get(key)
             if previous:
-                errors.append(
-                    f"line {row.line}: {kind} {value!r} conflicts with "
-                    f"{previous[0]} on line {previous[1]}"
+                case_only_alias = (
+                    kind == "alias"
+                    and previous == ("preferred term", row.line)
+                    and value != row.term
+                    and value.casefold() == row.term.casefold()
                 )
+                if not case_only_alias:
+                    errors.append(
+                        f"line {row.line}: {kind} {value!r} conflicts with "
+                        f"{previous[0]} on line {previous[1]}"
+                    )
             else:
                 names[key] = (kind, row.line)
         if (
@@ -795,7 +802,7 @@ def validate_glossary(
 
 def glossary_prohibited_terms(
     path: Path, require_approved_definitions: bool
-) -> list[tuple[str, str]]:
+) -> list[tuple[str, str, bool]]:
     if not path.is_file():
         return []
     rows, errors = validate_glossary(path, require_approved_definitions)
@@ -804,7 +811,7 @@ def glossary_prohibited_terms(
             f"glossary is invalid: {path}\n"
             + "\n".join(f"- {error}" for error in errors)
         )
-    prohibited: list[tuple[str, str]] = []
+    prohibited: list[tuple[str, str, bool]] = []
     for row in rows:
         status = row.status.casefold()
         if status == "approved":
@@ -812,6 +819,7 @@ def glossary_prohibited_terms(
                 (
                     alias,
                     f"use the approved term {row.term!r} instead of {alias!r}",
+                    alias.casefold() == row.term.casefold(),
                 )
                 for alias in row.avoid
             )
@@ -821,6 +829,7 @@ def glossary_prohibited_terms(
                     row.term,
                     f"the term {row.term!r} is deprecated; "
                     "use the replacement in GLOSSARY.md",
+                    False,
                 )
             )
     return prohibited
@@ -831,7 +840,7 @@ def lint_text(
     path: str,
     config: Config,
     mode: str,
-    prohibited_terms: list[tuple[str, str]],
+    prohibited_terms: list[tuple[str, str, bool]],
 ) -> list[Diagnostic]:
     masked = strip_code(text)
     rules: dict[str, str] = config.data["rules"]
@@ -954,8 +963,10 @@ def lint_text(
         for phrase, match in find_phrases(masked, active_phrases):
             add(rule, match.start(), f"{message}: {phrase!r}")
 
-    for prohibited, message in prohibited_terms:
-        for match in phrase_pattern(prohibited).finditer(masked):
+    for prohibited, message, case_sensitive in prohibited_terms:
+        for match in phrase_pattern(
+            prohibited, ignore_case=not case_sensitive
+        ).finditer(masked):
             add(
                 "glossary_term",
                 match.start(),
@@ -1068,7 +1079,7 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
                 ),
             }
         )
-    failed = lint_fails(all_diagnostics, mode, word_total, warning_limit)
+    failed = any(not result["passed"] for result in results)
     warning_count = sum(item.severity == "warning" for item in all_diagnostics)
     warning_rate = round(warning_count * 100.0 / max(word_total, 100), 2)
     if args.format == "json":

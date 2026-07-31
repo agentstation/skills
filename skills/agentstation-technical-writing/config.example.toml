@@ -40,10 +40,10 @@ scan = [
   "Cargo.toml",
 ]
 exclude = [
-  ".git/**",
-  "node_modules/**",
-  "vendor/**",
-  "dist/**",
-  "build/**",
-  "coverage/**",
+  ".git",
+  "node_modules",
+  "vendor",
+  "dist",
+  "build",
+  "coverage",
 ]
