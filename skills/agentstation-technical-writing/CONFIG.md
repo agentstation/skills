@@ -10,7 +10,8 @@ The CLI reads TOML configuration in this order:
 Later layers override earlier layers. An explicit `--config` path replaces
 automatic project discovery. It still inherits the global configuration.
 The invocation directory remains the project root for relative glossary and
-scan paths.
+scan paths. When the directory is inside a Git worktree, the worktree root
+takes precedence.
 
 Copy `config.example.toml` to create a project configuration:
 
@@ -59,7 +60,8 @@ directory's parent. The default `.agents/technical-writing.toml` therefore
 resolves `GLOSSARY.md` from the repository root.
 
 The configured path must stay inside the project root. Use the explicit
-`--glossary` option when you intentionally need another path.
+`--glossary` option when you intentionally need another path. The linter fails
+when that explicit path does not exist.
 
 The `[glossary]` table controls candidate discovery:
 

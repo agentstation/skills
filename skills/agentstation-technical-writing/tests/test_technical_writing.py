@@ -208,6 +208,33 @@ max_warnings_per_100_words = 100
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
 
+    def test_ing_heuristic_ignores_indefinite_pronouns(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            "--mode",
+            "strict",
+            input_text=(
+                "There is nothing left. This is something the caller supplies. "
+                "The result is anything other than 200."
+            ),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_modal_phrase_produces_one_diagnostic(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="It is important to note the result.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["modal_hedge"])
+
     def test_configurable_instruction_and_descriptive_limits(self) -> None:
         self.write_project_config(
             """
@@ -311,11 +338,42 @@ long_sentence = "error"
             "glossary_term",
         )
 
+    def test_repository_root_resolves_the_glossary_from_a_subdirectory(self) -> None:
+        (self.project / ".git").mkdir()
+        self.write_glossary(
+            "| worker | A process. | daemon | Approved | src/worker.py |\n"
+        )
+        docs = self.project / "docs"
+        docs.mkdir()
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            cwd=docs,
+            input_text="Start the daemon.",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        diagnostic = json.loads(result.stdout)["documents"][0]["diagnostics"][0]
+        self.assertEqual(diagnostic["rule"], "glossary_term")
+
     def test_configured_glossary_cannot_escape_the_project_root(self) -> None:
         self.write_project_config('[glossary]\npath = "../outside.md"\n')
         result = self.run_cli("glossary", "check")
         self.assertEqual(result.returncode, 2)
         self.assertIn("must stay inside the project root", result.stderr)
+
+    def test_missing_explicit_glossary_is_an_input_error(self) -> None:
+        missing = self.project / "missing-glossary.md"
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--glossary",
+            str(missing),
+            input_text="The parser reads the file.",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("explicit glossary does not exist", result.stderr)
 
     def test_multiple_paths_and_glob_are_deduplicated(self) -> None:
         docs = self.project / "docs"

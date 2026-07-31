@@ -86,6 +86,9 @@ BANNED = (
     "utilize",
     "utilizes",
     "utilizing",
+    "utilise",
+    "utilises",
+    "utilising",
     "leverage",
     "leverages",
     "leveraging",
@@ -108,6 +111,7 @@ BANNED = (
     "comprehensive",
     "comprehensively",
     "utilization",
+    "utilisation",
     "aforementioned",
     "henceforth",
     "therein",
@@ -120,7 +124,6 @@ BANNED = (
     "a variety of",
     "in the event that",
     "due to the fact that",
-    "it is important to note",
 )
 PHRASAL = (
     "spin up",
@@ -377,6 +380,16 @@ def nearest_project_config(start: Path) -> Path | None:
     return None
 
 
+def nearest_repository_root(start: Path) -> Path:
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    for directory in (current, *current.parents):
+        if (directory / ".git").exists():
+            return directory
+    return current
+
+
 def load_toml(path: Path) -> dict[str, Any]:
     if tomllib is None:
         raise CliError("Python 3.11 or newer is required for TOML configuration")
@@ -476,7 +489,7 @@ def load_config(explicit: str | None, cwd: Path) -> Config:
     explicit_path = Path(explicit).expanduser().resolve() if explicit else None
     project_path = None if explicit_path else nearest_project_config(cwd)
 
-    project_root = cwd.resolve()
+    project_root = nearest_repository_root(cwd)
     for path in (user_path, project_path, explicit_path):
         if path is None:
             continue
@@ -889,7 +902,8 @@ def lint_text(
         (
             "ing_main_verb",
             re.compile(
-                r"\b(?:am|is|are|was|were|be|been|being)\s+\w+ing\b",
+                r"\b(?:am|is|are|was|were|be|been|being)\s+"
+                r"(?!(?:nothing|something|anything|everything)\b)\w+ing\b",
                 re.IGNORECASE,
             ),
             "prefer a simple verb form",
@@ -1025,6 +1039,8 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
     if mode not in ("developer", "strict"):
         raise CliError("mode must be 'developer' or 'strict'")
     glossary = glossary_path(config, args.glossary)
+    if args.glossary and not glossary.is_file():
+        raise CliError(f"explicit glossary does not exist: {glossary}")
     prohibited = glossary_prohibited_terms(
         glossary, config.data["glossary"]["require_approved_definitions"]
     )

@@ -16,14 +16,28 @@ Use these common replacements unless the glossary requires another term:
 
 | Avoid | Prefer |
 |---|---|
-| `commence`, `initiate` | `start` |
-| `utilise`, `leverage` | `use` |
+| `begin`, `commence`, `initiate`, `originate` | `start` or the exact source |
+| `utilize`, `utilise`, `utilization`, `utilisation`, `leverage` | `use` |
 | `facilitate` | `help` |
+| `ensure` | the exact action that produces or verifies the result |
 | `prior to` | `before` |
 | `subsequent to` | `after` |
 | `obtain`, `acquire` | `get` |
 | `demonstrate` | `show` |
 | `additionally`, `furthermore`, `moreover` | `also` |
+| `comprehensive`, `comprehensively` | the exact scope |
+| `aforementioned` | the exact subject |
+| `henceforth` | `from now on` |
+| `therein` | the exact location |
+| `whilst`, `amongst` | `while`, `among` |
+| `numerous`, `myriad`, `plethora` | an exact number or `many` |
+| `in order to` | `to` |
+| `a variety of` | the exact items or `several` |
+| `in the event that` | `if` |
+| `due to the fact that` | `because` |
+
+Replace a modal preamble with the fact or condition. Examples include
+`it is important to note`, `it should be noted`, and `please note that`.
 
 Do not use promotional words as substitutes for evidence. Examples include
 `seamless`, `robust`, `powerful`, `effortless`, and `enterprise-grade`.
