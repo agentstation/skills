@@ -153,6 +153,11 @@ class AutoreviewHardeningTests(unittest.TestCase):
         self.assertEqual(candidates["fable5"]["intelligence"], 10)
         self.assertEqual(candidates["sol"]["intelligence"], 8.5)
         self.assertEqual(candidates["opus5"]["intelligence"], 8)
+        self.assertEqual(candidates["fable5"]["taste"], 9)
+        self.assertEqual(candidates["sol"]["taste"], 8)
+        self.assertEqual(candidates["opus5"]["taste"], 8.5)
+        self.assertEqual(candidates["terra"]["taste"], 7)
+        self.assertEqual(candidates["luna"]["taste"], 6)
         for candidate in candidates.values():
             if candidate["engine"] == "claude":
                 self.assertNotIn(candidate["effort"], {"xhigh", "max"})
