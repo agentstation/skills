@@ -55,17 +55,19 @@ every measured effort.
 Rows are ordered by owner intelligence score descending; pass rate and then
 cost break ties. Model and candidate ID come first so each row is identifiable.
 A layered configuration can retain the same candidate ID while overriding its
-effort and matching benchmark inputs.
+effort and matching benchmark inputs. `selection score` is the result of the
+formula above. Eligibility, host isolation, profile constraints, and manual
+approval are applied before score ranking.
 
-| model | candidate ID | intelligence | taste | harness | effort | when to use | cost/task | manual approval required |
-| --- | --- | ---: | ---: | --- | :---: | --- | ---: | :---: |
-| Fable 5 | `fable5` | 10 | 9 | Claude Code CLI | high | Manual architectural review, planning, or orchestration only | $9.18 | yes |
-| GPT-5.6 Sol | `sol` | 9 | 8 | Codex CLI | xhigh | Complex, high-risk, or intelligence-critical review | $4.70 | no |
-| GPT-5.6 Sol | `sol` | 8.5 | 8 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
-| Opus 5 | `opus5` | 8 | 8.5 | Claude Code CLI | high | Default code reviewer when the host is Codex | $6.08 | no |
-| GPT-5.6 Terra | `terra` | 8 | 7 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | $3.96 | no |
-| Opus 5 | `opus5` | 7.5 | 8.5 | Claude Code CLI | medium | Layered Claude value override when cost matters | $3.29 | no |
-| GPT-5.6 Luna | `luna` | 6 | 6 | Codex CLI | max | `budget` profile for low-cost or high-volume review | $0.61 | no |
+| model | candidate ID | intelligence | taste | selection score | harness | effort | when to use | cost/task | manual approval required |
+| --- | --- | ---: | ---: | ---: | --- | :---: | --- | ---: | :---: |
+| Fable 5 | `fable5` | 10 | 9 | 8.13 | Claude Code CLI | high | Manual architectural review, planning, or orchestration only | $9.18 | yes |
+| GPT-5.6 Sol | `sol` | 9 | 8 | 7.96 | Codex CLI | xhigh | Complex, high-risk, or intelligence-critical review | $4.70 | no |
+| GPT-5.6 Sol | `sol` | 8.5 | 8 | 7.83 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
+| Opus 5 | `opus5` | 8 | 8.5 | 7.52 | Claude Code CLI | high | Default code reviewer when the host is Codex | $6.08 | no |
+| GPT-5.6 Terra | `terra` | 8 | 7 | 7.32 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | $3.96 | no |
+| Opus 5 | `opus5` | 7.5 | 8.5 | 7.52 | Claude Code CLI | medium | Layered Claude value override when cost matters | $3.29 | no |
+| GPT-5.6 Luna | `luna` | 6 | 6 | 6.47 | Codex CLI | max | `budget` profile for low-cost or high-volume review | $0.61 | no |
 
 The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
 
@@ -97,7 +99,8 @@ Update procedure:
 1. Recompute the allowed model/effort frontier from the current DeepSWE release.
 2. Recompute selected-effort average cost per task and normalized cost.
 3. Revisit owner scores for unsupervised capability and taste.
-4. Keep the benchmark version and snapshot date in this file.
-5. Run the helper self-tests and hardening suite.
-6. Change built-ins only when the evidence affects a fresh install; put
+4. Recompute the displayed selection scores from the executable formula.
+5. Keep the benchmark version and snapshot date in this file.
+6. Run the helper self-tests and hardening suite.
+7. Change built-ins only when the evidence affects a fresh install; put
    machine- or project-specific opinions in layered config.
