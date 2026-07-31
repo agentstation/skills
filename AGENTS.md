@@ -9,3 +9,8 @@ Canonical reusable skills live under `skills/<name>/SKILL.md`.
 - Prefer executable enforcement for security and model-selection boundaries.
 - Record derivative skill provenance and upstream commit IDs.
 - Validate changes with `scripts/validate-skills` and each skill's own tests.
+
+## Technical writing
+
+Use `GLOSSARY.md` for developer-facing prose. Run the installed
+`agentstation-technical-writing` linter on durable technical text.
