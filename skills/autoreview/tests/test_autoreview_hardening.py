@@ -108,6 +108,52 @@ class AutoreviewHardeningTests(unittest.TestCase):
 
         self.assertEqual([item[0] for item in selected], ["opus5"])
 
+    def test_value_and_budget_profiles_use_selected_sweet_spots(self) -> None:
+        config = self.helper["deep_merge_review_config"](
+            self.helper["BUILTIN_REVIEW_CONFIG"],
+            {},
+        )
+        args = argparse.Namespace(
+            codex_bin="codex",
+            claude_bin="claude",
+            pi_bin="pi",
+        )
+        globals_dict = self.helper["select_profile_candidates"].__globals__
+        with mock.patch.dict(
+            globals_dict,
+            {"engine_binary": lambda _args, engine: f"/trusted/{engine}"},
+        ):
+            value = self.helper["select_profile_candidates"](
+                config,
+                args,
+                "value",
+                profile_explicit=True,
+            )
+            budget = self.helper["select_profile_candidates"](
+                config,
+                args,
+                "budget",
+                profile_explicit=True,
+            )
+
+        self.assertEqual(value[0][0], "terra")
+        self.assertEqual(value[0][1]["effort"], "max")
+        self.assertEqual(value[0][1]["deepswe_pass_rate"], 70)
+        self.assertEqual(value[0][1]["deepswe_avg_cost_usd"], 3.96)
+        self.assertEqual(budget[0][0], "luna")
+        self.assertEqual(budget[0][1]["effort"], "max")
+        self.assertEqual(budget[0][1]["deepswe_pass_rate"], 67)
+        self.assertEqual(budget[0][1]["deepswe_avg_cost_usd"], 0.61)
+
+    def test_builtin_pool_excludes_dominated_models_and_caps_anthropic(self) -> None:
+        candidates = self.helper["BUILTIN_REVIEW_CONFIG"]["candidates"]
+
+        self.assertNotIn("opus48", candidates)
+        self.assertNotIn("sonnet5", candidates)
+        for candidate in candidates.values():
+            if candidate["engine"] == "claude":
+                self.assertNotIn(candidate["effort"], {"xhigh", "max"})
+
     def test_fable_profile_requires_manual_approval(self) -> None:
         config = self.helper["deep_merge_review_config"](
             self.helper["BUILTIN_REVIEW_CONFIG"],

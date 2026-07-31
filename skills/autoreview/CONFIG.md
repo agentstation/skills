@@ -71,10 +71,11 @@ harness. The candidate table name is a stable ID for the complete reviewer
 configuration, not another model field.
 
 `cost` is literal on a 0–10 scale derived from DeepSWE's measured average cost
-per high-effort task: 0 is free and 10 is the most expensive candidate. Preserve
-the underlying measurement in `deepswe_avg_cost_usd`. Lower cost improves the
-automatic-selection score. `manual_approval_required` is a separate safety gate
-and does not affect the score. See
+per task at the candidate's configured effort: 0 is free and 10 is the most
+expensive candidate. Preserve the underlying measurement in
+`deepswe_avg_cost_usd`. Lower cost improves the automatic-selection score.
+`manual_approval_required` is a separate safety gate and does not affect the
+score. See
 [`MODEL_SELECTION.md`](MODEL_SELECTION.md) for the normalization formula and
 source data.
 

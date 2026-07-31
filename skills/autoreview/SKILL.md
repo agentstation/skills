@@ -59,6 +59,7 @@ the current host agent. The built-in profiles are:
 "$AUTOREVIEW" --profile sol
 "$AUTOREVIEW" --profile opus
 "$AUTOREVIEW" --profile cross-lab
+"$AUTOREVIEW" --profile value
 "$AUTOREVIEW" --profile budget
 "$AUTOREVIEW" --profile fable
 ```

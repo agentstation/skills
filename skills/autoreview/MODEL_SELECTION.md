@@ -18,12 +18,13 @@ selection.
 
 ## Cost basis
 
-Cost uses the average `cost_usd` of included, full-scope, high-effort trials in
-the [DeepSWE v1.1 data](https://deepswe.datacurve.ai/data/v1.1). Normalize each
-model's measured average to the most expensive candidate, Fable 5:
+Cost uses the average `cost_usd` of included, full-scope trials at the selected
+effort in the [DeepSWE v1.1 data](https://deepswe.datacurve.ai/data/v1.1).
+Normalize each model/effort pair to Fable 5 at high, the most expensive selected
+pair:
 
 ```text
-cost = 10 × model average cost per task ÷ Fable average cost per task
+cost = 10 × model/effort average cost per task ÷ $9.18
 ```
 
 The July 30, 2026 snapshot uses DeepSWE's current cost corrections and rounds
@@ -31,35 +32,52 @@ the normalized score to one decimal. Subscription scarcity is a separate policy
 concern. Fable's current Claude plan treatment is unusually restrictive, but
 that affects `manual_approval_required`, not its measured cost score.
 
-## Candidate snapshot
+## Selected sweet spots
 
-The built-in snapshot uses high effort for review defaults:
+No Anthropic model/effort pair above `high` is eligible. For other providers,
+higher effort remains eligible when the capability gain justifies its marginal
+cost. The table intentionally includes only useful review operating points, not
+every measured effort.
 
-Each candidate ID names a complete reviewer configuration: harness, model,
-effort, scores, and approval policy. The harness and model are separate.
-Candidates are ordered by intelligence descending; taste and pass rate break
-intelligence ties:
+Rows are ordered by owner intelligence score descending; pass rate and then
+cost break ties:
 
-| candidate ID | intelligence | harness | model | effort | avg cost/task | cost | manual approval required | taste | DeepSWE pass |
-| --- | ---: | --- | --- | :---: | ---: | ---: | :---: | ---: | ---: |
-| `opus5` | 9 | Claude Code CLI | Opus 5 | high | $6.08 | 6.6 | no | 9 | 73% |
-| `fable5` | 9 | Claude Code CLI | Fable 5 | high | $9.18 | 10 | yes | 9 | 69% |
-| `sol` | 9 | Codex CLI | GPT-5.6 Sol | high | $3.47 | 3.8 | no | 8.5 | 69% |
-| `terra` | 8 | Codex CLI | GPT-5.6 Terra | high | $0.91 | 1.0 | no | 8 | 54% |
-| `opus48` | 7 | Claude Code CLI | Opus 4.8 | high | $4.28 | 4.7 | no | 8 | 52% |
-| `luna` | 6 | Codex CLI | GPT-5.6 Luna | high | $0.16 | 0.2 | no | 7 | 44% |
-| `sonnet5` | 5 | Claude Code CLI | Sonnet 5 | high | $7.43 | 8.1 | no | 7 | 48% |
+| intelligence | taste | harness | model | effort | DeepSWE pass | avg cost/task | out tok | steps | cost | manual approval required |
+| ---: | ---: | --- | --- | :---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 9 | 9 | Claude Code CLI | Opus 5 | high | 73%±2% | $6.08 | 64k | 73 | 6.6 | no |
+| 9 | 8.5 | Codex CLI | GPT-5.6 Sol | xhigh | 71%±1% | $4.70 | 41k | 44 | 5.1 | no |
+| 9 | 9 | Claude Code CLI | Opus 5 | medium | 69%±1% | $3.29 | 37k | 52 | 3.6 | no |
+| 9 | 8.5 | Codex CLI | GPT-5.6 Sol | high | 69%±1% | $3.47 | 28k | 37 | 3.8 | no |
+| 9 | 9 | Claude Code CLI | Fable 5 | high | 69%±1% | $9.18 | 57k | 59 | 10 | yes |
+| 8 | 8 | Codex CLI | GPT-5.6 Terra | max | 70%±3% | $3.96 | 72k | 76 | 4.3 | no |
+| 6 | 7 | Codex CLI | GPT-5.6 Luna | max | 67%±4% | $0.61 | 73k | 102 | 0.7 | no |
 
-Fable never participates in automatic selection because it requires manual
-approval, independently of its cost score. The default Claude cap stays at
-high: DeepSWE shows Opus 5 high and xhigh effectively tied while Anthropic
-documents substantially higher token use above high. Sol can be selected
-explicitly at xhigh for unusually hard, high-risk review.
+The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
+
+- Opus 5 high is the quality sweet spot. It matches xhigh at 73% while saving
+  $2.99 per task, and stays within the Anthropic ceiling.
+- Sol high remains the standard Codex reviewer. Sol xhigh is the complex-task
+  sweet spot and is used by Nimbus; max buys only two more pass points for
+  another $3.69 over xhigh.
+- Terra max is the value profile: 70% at $3.96.
+- Luna max is the budget profile: 67% at only $0.61. Its lower efforts remain
+  on the mathematical cost/pass frontier, but are not credible PR review
+  defaults.
+- Opus 5 medium is a documented Claude value alternative for layered config,
+  but automatic Codex-hosted review retains high for the stronger quality gate.
+- Fable high remains available only by manual approval and never participates
+  in automatic selection or fallback.
+
+Opus 4.8, Sonnet 5/4.6, GPT-5.5/5.4, Kimi, Grok, Muse, Gemini, and GLM do not
+enter the built-in pool. Their supplied rows are dominated on pass rate and
+cost by a selected operating point, or they lack a justified isolation-safe
+default harness. Anthropic xhigh and max rows are excluded by policy regardless
+of benchmark result.
 
 Update procedure:
 
-1. Recompute the high-effort benchmark column from the current DeepSWE release.
-2. Recompute high-effort average cost per task and normalized cost.
+1. Recompute the allowed model/effort frontier from the current DeepSWE release.
+2. Recompute selected-effort average cost per task and normalized cost.
 3. Revisit owner scores for unsupervised capability and taste.
 4. Keep the benchmark version and snapshot date in this file.
 5. Run the helper self-tests and hardening suite.
