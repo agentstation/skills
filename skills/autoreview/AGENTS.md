@@ -9,6 +9,8 @@
   criteria.
 - Keep Fable behind manual approval and unavailable to automatic selection or
   fallback.
+- Reserve Fable for architectural review, architectural planning, and
+  orchestration; keep Opus 5 high as the default Claude-side code reviewer.
 - Keep built-in Claude effort at or below `high`; higher caps must be conscious
   configuration.
 - Keep the default automatic cadence at the substantive-code pre-PR gate.

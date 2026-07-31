@@ -32,6 +32,19 @@ the normalized score to one decimal. Subscription scarcity is a separate policy
 concern. Fable's current Claude plan treatment is unusually restrictive, but
 that affects `manual_approval_required`, not its measured cost score.
 
+## Claude allocation policy
+
+Treat the Claude subscription as two purpose-specific allocations:
+
+- Reserve the limited Fable 5 allocation for manually approved architectural
+  review, architectural planning, and orchestration.
+- Use Opus 5 high for routine code review. It remains the default Claude-side
+  reviewer because its code-review price/performance is stronger and its
+  allocation is normally more available.
+
+Fable's higher intelligence score does not make it the automatic code-review
+default. Use-case policy and manual approval take precedence over score.
+
 ## Selected sweet spots
 
 No Anthropic model/effort pair above `high` is eligible. For other providers,
@@ -46,18 +59,19 @@ effort and matching benchmark inputs.
 
 | model | candidate ID | intelligence | taste | harness | effort | when to use | cost/task | manual approval required |
 | --- | --- | ---: | ---: | --- | :---: | --- | ---: | :---: |
-| Fable 5 | `fable5` | 10 | 9 | Claude Code CLI | high | Only when the user explicitly requests and approves Fable | $9.18 | yes |
+| Fable 5 | `fable5` | 10 | 9 | Claude Code CLI | high | Manual architectural review, planning, or orchestration only | $9.18 | yes |
 | GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | xhigh | Complex or high-risk review; Nimbus Codex candidate | $4.70 | no |
 | GPT-5.6 Sol | `sol` | 8.5 | 8.5 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
-| Opus 5 | `opus5` | 8 | 9 | Claude Code CLI | high | Default automatic reviewer when the host is Codex | $6.08 | no |
+| Opus 5 | `opus5` | 8 | 9 | Claude Code CLI | high | Default code reviewer when the host is Codex | $6.08 | no |
 | GPT-5.6 Terra | `terra` | 8 | 8 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | $3.96 | no |
 | Opus 5 | `opus5` | 7.5 | 9 | Claude Code CLI | medium | Layered Claude value override when cost matters | $3.29 | no |
 | GPT-5.6 Luna | `luna` | 6 | 7 | Codex CLI | max | `budget` profile for low-cost or high-volume review | $0.61 | no |
 
 The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
 
-- Opus 5 high is the quality sweet spot. It matches xhigh at 73% while saving
-  $2.99 per task, and stays within the Anthropic ceiling.
+- Opus 5 high is the default code-review sweet spot. It matches xhigh at 73%
+  while saving $2.99 per task, stays within the Anthropic ceiling, and uses the
+  Claude allocation intended for code review.
 - Sol high remains the standard Codex reviewer. Sol xhigh is the complex-task
   sweet spot and is used by Nimbus; max buys only two more pass points for
   another $3.69 over xhigh.
@@ -67,8 +81,9 @@ The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
   defaults.
 - Opus 5 medium is a documented Claude value alternative for layered config,
   but automatic Codex-hosted review retains high for the stronger quality gate.
-- Fable high remains available only by manual approval and never participates
-  in automatic selection or fallback.
+- Fable high remains available only by manual approval for architectural
+  review, planning, or orchestration. It never participates in routine
+  automatic code review or fallback.
 
 Opus 4.8, Sonnet 5/4.6, GPT-5.5/5.4, Kimi, Grok, Muse, Gemini, and GLM do not
 enter the built-in pool. Their supplied rows are dominated on pass rate and
