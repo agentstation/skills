@@ -5966,7 +5966,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 os.environ["SHELLOPTS"] = "xtrace"
                 os.environ["NODE_OPTIONS"] = "--require=/tmp/unsafe.js"
                 os.environ["SERVICE_URL"] = (
-                    "https://review-user:review-password@example.invalid/api"
+                    "https://review-user:"
+                    + "review-password@example.invalid/api"
                 )
                 os.environ["UNRELATED_VALUE"] = "ghp_" + "A" * 24
 
@@ -6132,8 +6133,10 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 self.assertTrue(self.helper["safe_proxy_url"](value))
 
         for value in (
-            "http://review-user:review-password@proxy.example.invalid:8080",
-            "socks5://review-user:review-password@proxy.example.invalid:1080",
+            "http://review-user:"
+            + "review-password@proxy.example.invalid:8080",
+            "socks5://review-user:"
+            + "review-password@proxy.example.invalid:1080",
         ):
             with self.subTest(value=value):
                 self.assertFalse(self.helper["safe_proxy_url"](value))
@@ -6143,7 +6146,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
             os.environ,
             {
                 "HTTPS_PROXY": (
-                    "http://review-user:review-password@proxy.example.invalid:8080"
+                    "http://review-user:"
+                    + "review-password@proxy.example.invalid:8080"
                 )
             },
             clear=False,
