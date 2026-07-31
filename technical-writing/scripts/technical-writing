@@ -44,6 +44,7 @@ RULE_IDS = (
     "glossary_term",
 )
 SEVERITIES = {"off", "warning", "error"}
+LIST_ITEM_PATTERN = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
 # These lists preserve the source linter's vocabulary. Project configuration can
 # add terms without changing this executable.
@@ -547,7 +548,6 @@ def word_count(text: str) -> int:
 
 def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
     """Yield prose blocks without merging adjacent Markdown structures."""
-    list_item = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
     standalone = re.compile(r"^\s*(?:#{1,6}\s+|\|)")
     quote = re.compile(r"^\s*>\s*")
     lines = list(re.finditer(r".*(?:\n|\Z)", text))
@@ -560,7 +560,7 @@ def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
         if not line:
             continue
         stripped = line.strip()
-        line_is_list_item = bool(list_item.match(line))
+        line_is_list_item = bool(LIST_ITEM_PATTERN.match(line))
         line_is_standalone = bool(standalone.match(line))
         line_is_quote = bool(quote.match(line))
         line_starts_block = line_is_list_item or line_is_standalone or line_is_quote
@@ -857,10 +857,16 @@ def lint_text(
             )
 
     paragraphs = list(paragraph_spans(masked))
-    all_sentences: list[tuple[int, int]] = []
+    all_sentences: list[tuple[int, int, bool, int]] = []
     for start, end in paragraphs:
         spans = sentence_spans(masked, start, end)
-        all_sentences.extend(spans)
+        list_marker = LIST_ITEM_PATTERN.match(masked[start:end])
+        instruction = list_marker is not None
+        marker_end = start + list_marker.end() if list_marker else start
+        all_sentences.extend(
+            (sentence_start, sentence_end, instruction, marker_end)
+            for sentence_start, sentence_end in spans
+        )
         if len(spans) > int(limits["paragraph_sentences"]):
             add(
                 "long_paragraph",
@@ -868,11 +874,9 @@ def lint_text(
                 f"paragraph has {len(spans)} sentences; "
                 f"limit is {limits['paragraph_sentences']}",
             )
-    for start, end in all_sentences:
-        count = word_count(masked[start:end])
-        line_start = masked.rfind("\n", 0, start) + 1
-        prefix = masked[line_start:start] + masked[start : min(end, start + 40)]
-        instruction = bool(re.match(r"\s*(?:[-*+]|\d+[.)])\s+", prefix))
+    for start, end, instruction, marker_end in all_sentences:
+        sentence_text = masked[max(start, marker_end) : end]
+        count = word_count(sentence_text)
         limit_key = "instruction_words" if instruction else "descriptive_words"
         sentence_limit = int(limits[limit_key])
         if count > sentence_limit:

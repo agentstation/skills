@@ -257,7 +257,58 @@ long_sentence = "error"
         self.assertEqual(result.returncode, 1)
         diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
         self.assertEqual([item["rule"] for item in diagnostics], ["long_sentence"])
+        self.assertIn("sentence has 5 words", diagnostics[0]["message"])
         self.assertIn("limit is 3", diagnostics[0]["message"])
+
+    def test_numbered_list_marker_does_not_consume_instruction_budget(self) -> None:
+        self.write_project_config(
+            """
+[limits]
+instruction_words = 5
+descriptive_words = 50
+max_warnings_per_100_words = 100
+
+[rules]
+long_sentence = "error"
+"""
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="1. Read the complete configuration file.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_each_sentence_in_list_item_uses_instruction_limit(self) -> None:
+        self.write_project_config(
+            """
+[limits]
+instruction_words = 5
+descriptive_words = 50
+max_warnings_per_100_words = 100
+
+[rules]
+long_sentence = "error"
+"""
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                "1. Read the file. "
+                "Verify the complete configuration before continuing."
+            ),
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["long_sentence"])
+        self.assertIn("sentence has 6 words", diagnostics[0]["message"])
+        self.assertIn("limit is 5", diagnostics[0]["message"])
 
     def test_wrapped_list_item_uses_the_instruction_limit(self) -> None:
         self.write_project_config(
