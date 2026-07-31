@@ -9,12 +9,12 @@ The built-in score is:
 + 0.10 × (10 − cost)
 ```
 
-`intelligence`, `taste`, and benchmark performance are higher-is-better.
-`cost` is literal: 0 is free and 10 is the most expensive candidate. The
-formula inverts cost so lower-cost candidates score higher. DeepSWE provides
-both the pass rate and measured task cost under `mini-swe-agent`. It is not a
-direct code-review benchmark, so pass rate receives 20% rather than controlling
-selection.
+`intelligence` and `taste` are owner-calibrated from real model use at the
+configured effort; they are not aliases for benchmark rank. DeepSWE separately
+provides pass rate and measured task cost under `mini-swe-agent`. `cost` is
+literal: 0 is free and 10 is the most expensive candidate, so the formula
+inverts it. DeepSWE is not a direct code-review benchmark, so pass rate receives
+20% rather than controlling selection.
 
 ## Cost basis
 
@@ -46,12 +46,12 @@ effort and matching benchmark inputs.
 
 | model | candidate ID | intelligence | taste | harness | effort | when to use | cost/task | manual approval required |
 | --- | --- | ---: | ---: | --- | :---: | --- | ---: | :---: |
-| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | high | Default automatic reviewer when the host is Codex | $6.08 | no |
+| Fable 5 | `fable5` | 10 | 9 | Claude Code CLI | high | Only when the user explicitly requests and approves Fable | $9.18 | yes |
 | GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | xhigh | Complex or high-risk review; Nimbus Codex candidate | $4.70 | no |
-| Opus 5 | `opus5` | 9 | 9 | Claude Code CLI | medium | Layered Claude value override when cost matters | $3.29 | no |
-| GPT-5.6 Sol | `sol` | 9 | 8.5 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
-| Fable 5 | `fable5` | 9 | 9 | Claude Code CLI | high | Only when the user explicitly requests and approves Fable | $9.18 | yes |
+| GPT-5.6 Sol | `sol` | 8.5 | 8.5 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
+| Opus 5 | `opus5` | 8 | 9 | Claude Code CLI | high | Default automatic reviewer when the host is Codex | $6.08 | no |
 | GPT-5.6 Terra | `terra` | 8 | 8 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | $3.96 | no |
+| Opus 5 | `opus5` | 7.5 | 9 | Claude Code CLI | medium | Layered Claude value override when cost matters | $3.29 | no |
 | GPT-5.6 Luna | `luna` | 6 | 7 | Codex CLI | max | `budget` profile for low-cost or high-volume review | $0.61 | no |
 
 The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:

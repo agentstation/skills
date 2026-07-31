@@ -150,6 +150,9 @@ class AutoreviewHardeningTests(unittest.TestCase):
 
         self.assertNotIn("opus48", candidates)
         self.assertNotIn("sonnet5", candidates)
+        self.assertEqual(candidates["fable5"]["intelligence"], 10)
+        self.assertEqual(candidates["sol"]["intelligence"], 8.5)
+        self.assertEqual(candidates["opus5"]["intelligence"], 8)
         for candidate in candidates.values():
             if candidate["engine"] == "claude":
                 self.assertNotIn(candidate["effort"], {"xhigh", "max"})
