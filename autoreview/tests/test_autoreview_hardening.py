@@ -734,6 +734,110 @@ class AutoreviewHardeningTests(unittest.TestCase):
             self.assertIn("-runFixture();", bundle)
             self.assertFalse(truncated)
 
+    def test_branch_bundle_summarizes_exact_secret_fixture_rename(self) -> None:
+        value = realistic_secret_value()
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            source = repo / "old" / "fixture.ts"
+            source.parent.mkdir()
+            source.write_text(
+                f'const apiKey = "{value}";\n',
+                encoding="utf-8",
+            )
+            git(repo, "add", str(source.relative_to(repo)))
+            git(repo, "commit", "-q", "-m", "base")
+            base = git(repo, "rev-parse", "HEAD").strip()
+            destination = repo / "new" / "fixture.ts"
+            destination.parent.mkdir()
+            git(
+                repo,
+                "mv",
+                str(source.relative_to(repo)),
+                str(destination.relative_to(repo)),
+            )
+            git(repo, "commit", "-q", "-m", "move fixture")
+
+            bundle, truncated = self.helper["branch_bundle"](repo, base)
+
+            self.assertNotIn(value, bundle)
+            self.assertIn("similarity index 100%", bundle)
+            self.assertIn("rename from old/fixture.ts", bundle)
+            self.assertIn("rename to new/fixture.ts", bundle)
+            self.assertFalse(truncated)
+
+    def test_branch_bundle_omits_unchanged_secret_from_minor_file_move(self) -> None:
+        value = realistic_secret_value()
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            source = repo / "old" / "fixture.ts"
+            source.parent.mkdir()
+            source.write_text(
+                f'const apiKey = "{value}";\n'
+                + "".join(f"const safe{i} = {i};\n" for i in range(20))
+                + "before();\n",
+                encoding="utf-8",
+            )
+            git(repo, "add", str(source.relative_to(repo)))
+            git(repo, "commit", "-q", "-m", "base")
+            base = git(repo, "rev-parse", "HEAD").strip()
+            destination = repo / "new" / "fixture.ts"
+            destination.parent.mkdir()
+            git(
+                repo,
+                "mv",
+                str(source.relative_to(repo)),
+                str(destination.relative_to(repo)),
+            )
+            destination.write_text(
+                destination.read_text(encoding="utf-8").replace(
+                    "before();",
+                    "after();",
+                ),
+                encoding="utf-8",
+            )
+            git(repo, "add", str(destination.relative_to(repo)))
+            git(repo, "commit", "-q", "-m", "move and edit fixture")
+
+            bundle, truncated = self.helper["branch_bundle"](repo, base)
+
+            self.assertNotIn(value, bundle)
+            self.assertIn("similarity index", bundle)
+            self.assertIn("rename from old/fixture.ts", bundle)
+            self.assertIn("rename to new/fixture.ts", bundle)
+            self.assertIn("+after();", bundle)
+            self.assertFalse(truncated)
+
+    def test_branch_bundle_refuses_edited_secret_fixture_move(self) -> None:
+        value = realistic_secret_value()
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            source = repo / "old" / "fixture.ts"
+            source.parent.mkdir()
+            source.write_text(
+                f'const apiKey = "{value}";\n',
+                encoding="utf-8",
+            )
+            git(repo, "add", str(source.relative_to(repo)))
+            git(repo, "commit", "-q", "-m", "base")
+            base = git(repo, "rev-parse", "HEAD").strip()
+            destination = repo / "new" / "fixture.ts"
+            destination.parent.mkdir()
+            git(
+                repo,
+                "mv",
+                str(source.relative_to(repo)),
+                str(destination.relative_to(repo)),
+            )
+            destination.write_text(
+                f'const apiKey = "{value}";\nrunFixture();\n',
+                encoding="utf-8",
+            )
+            git(repo, "add", str(destination.relative_to(repo)))
+            git(repo, "commit", "-q", "-m", "move and edit fixture")
+
+            with self.assertRaisesRegex(SystemExit, "known secret-like value"):
+                self.helper["branch_bundle"](repo, base)
+
     def test_local_bundle_preserves_boundary_when_sensitive_diff_is_omitted(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repo = init_repo(Path(tempdir))
@@ -5862,7 +5966,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 os.environ["SHELLOPTS"] = "xtrace"
                 os.environ["NODE_OPTIONS"] = "--require=/tmp/unsafe.js"
                 os.environ["SERVICE_URL"] = (
-                    "https://review-user:review-password@example.invalid/api"
+                    "https://review-user:"
+                    + "review-password@example.invalid/api"
                 )
                 os.environ["UNRELATED_VALUE"] = "ghp_" + "A" * 24
 
@@ -6028,8 +6133,10 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 self.assertTrue(self.helper["safe_proxy_url"](value))
 
         for value in (
-            "http://review-user:review-password@proxy.example.invalid:8080",
-            "socks5://review-user:review-password@proxy.example.invalid:1080",
+            "http://review-user:"
+            + "review-password@proxy.example.invalid:8080",
+            "socks5://review-user:"
+            + "review-password@proxy.example.invalid:1080",
         ):
             with self.subTest(value=value):
                 self.assertFalse(self.helper["safe_proxy_url"](value))
@@ -6039,7 +6146,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
             os.environ,
             {
                 "HTTPS_PROXY": (
-                    "http://review-user:review-password@proxy.example.invalid:8080"
+                    "http://review-user:"
+                    + "review-password@proxy.example.invalid:8080"
                 )
             },
             clear=False,

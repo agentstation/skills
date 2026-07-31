@@ -1,0 +1,50 @@
+version = 1
+mode = "developer"
+
+[limits]
+instruction_words = 20
+descriptive_words = 25
+paragraph_sentences = 6
+max_warnings_per_100_words = 1.5
+
+[rules]
+long_sentence = "error"
+semicolon = "error"
+contraction = "error"
+passive_voice = "warning"
+ing_main_verb = "warning"
+nominalization = "warning"
+phrasal_verb = "warning"
+banned_word = "error"
+marketing_adjective = "error"
+modal_hedge = "error"
+long_paragraph = "error"
+em_dash = "error"
+glossary_term = "error"
+
+[terms]
+additional_banned = []
+allowed = []
+
+[glossary]
+path = "GLOSSARY.md"
+required = false
+require_approved_definitions = true
+candidate_min_occurrences = 2
+ignored_candidates = []
+scan = [
+  "README.md",
+  "docs/**/*.md",
+  "src/**/*",
+  "package.json",
+  "pyproject.toml",
+  "Cargo.toml",
+]
+exclude = [
+  ".git",
+  "node_modules",
+  "vendor",
+  "dist",
+  "build",
+  "coverage",
+]

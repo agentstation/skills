@@ -1,0 +1,1521 @@
+#!/usr/bin/env python3
+"""Lint technical prose and maintain a project glossary.
+
+The surface-form checks are adapted from woosal1337/blog's
+videos/ep01-the-cure-for-ai-slop/ste-lint.py (MIT), reviewed at commit
+1de95f861304d71f028f7cc6ef3f171bb2c59f05. This implementation adds
+configuration, diagnostics, glossary enforcement, and project term discovery.
+It does not certify ASD-STE100 conformance.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import glob
+import json
+import os
+import re
+import sys
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterable
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.11 is required.
+    tomllib = None  # type: ignore[assignment]
+
+
+RULE_IDS = (
+    "long_sentence",
+    "semicolon",
+    "contraction",
+    "passive_voice",
+    "ing_main_verb",
+    "nominalization",
+    "phrasal_verb",
+    "banned_word",
+    "marketing_adjective",
+    "modal_hedge",
+    "long_paragraph",
+    "em_dash",
+    "glossary_term",
+)
+SEVERITIES = {"off", "warning", "error"}
+LIST_ITEM_PATTERN = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+
+# These lists preserve the source linter's vocabulary. Project configuration can
+# add terms without changing this executable.
+MARKETING = (
+    "seamless",
+    "seamlessly",
+    "robust",
+    "powerful",
+    "cutting-edge",
+    "effortless",
+    "effortlessly",
+    "world-class",
+    "next-generation",
+    "revolutionary",
+    "blazing",
+    "lightning-fast",
+    "elegant",
+    "delightful",
+    "turnkey",
+    "best-in-class",
+    "state-of-the-art",
+    "game-changing",
+    "first-class",
+    "battle-tested",
+    "enterprise-grade",
+    "supercharge",
+    "unlock",
+    "unleash",
+    "empower",
+    "empowers",
+)
+BANNED = (
+    "begin",
+    "begins",
+    "commence",
+    "commences",
+    "initiate",
+    "initiates",
+    "originate",
+    "utilize",
+    "utilizes",
+    "utilizing",
+    "utilise",
+    "utilises",
+    "utilising",
+    "leverage",
+    "leverages",
+    "leveraging",
+    "facilitate",
+    "facilitates",
+    "ensure",
+    "ensures",
+    "ensuring",
+    "prior to",
+    "subsequent to",
+    "obtain",
+    "obtains",
+    "acquire",
+    "acquires",
+    "demonstrate",
+    "demonstrates",
+    "additionally",
+    "furthermore",
+    "moreover",
+    "comprehensive",
+    "comprehensively",
+    "utilization",
+    "utilisation",
+    "aforementioned",
+    "henceforth",
+    "therein",
+    "whilst",
+    "amongst",
+    "numerous",
+    "myriad",
+    "plethora",
+    "in order to",
+    "a variety of",
+    "in the event that",
+    "due to the fact that",
+)
+PHRASAL = (
+    "spin up",
+    "spin down",
+    "reach out",
+    "dive into",
+    "dives into",
+    "diving into",
+    "kick off",
+    "kicks off",
+    "roll out",
+    "rolls out",
+    "tear down",
+    "ramp up",
+    "circle back",
+    "drill down",
+    "spun up",
+    "reaching out",
+)
+MODAL_HEDGE = (
+    "it is important to note",
+    "it should be noted",
+    "it is worth noting",
+    "please note that",
+    "as mentioned",
+    "as noted above",
+)
+CONTRACTIONS = (
+    "ain't",
+    "aren't",
+    "can't",
+    "couldn't",
+    "didn't",
+    "doesn't",
+    "don't",
+    "hadn't",
+    "hasn't",
+    "haven't",
+    "he'd",
+    "he'll",
+    "he's",
+    "how'd",
+    "how'll",
+    "how's",
+    "i'd",
+    "i'll",
+    "i'm",
+    "i've",
+    "isn't",
+    "it'd",
+    "it'll",
+    "it's",
+    "let's",
+    "mightn't",
+    "mustn't",
+    "she'd",
+    "she'll",
+    "she's",
+    "shouldn't",
+    "that'll",
+    "that's",
+    "there'd",
+    "there'll",
+    "there's",
+    "they'd",
+    "they'll",
+    "they're",
+    "they've",
+    "wasn't",
+    "we'd",
+    "we'll",
+    "we're",
+    "we've",
+    "weren't",
+    "what'd",
+    "what's",
+    "when's",
+    "where'd",
+    "where's",
+    "who'd",
+    "who'll",
+    "who's",
+    "won't",
+    "wouldn't",
+    "you'd",
+    "you'll",
+    "you're",
+    "you've",
+)
+
+BUILTINS: dict[str, Any] = {
+    "version": 1,
+    "mode": "developer",
+    "glossary": {
+        "path": "GLOSSARY.md",
+        "required": False,
+        "require_approved_definitions": True,
+        "scan": [
+            "README.md",
+            "docs",
+            "src",
+            "lib",
+            "app",
+            "packages",
+            "package.json",
+            "pyproject.toml",
+            "Cargo.toml",
+            "go.mod",
+        ],
+        "exclude": [
+            ".git",
+            ".agents",
+            "node_modules",
+            "vendor",
+            "dist",
+            "build",
+            ".venv",
+            "venv",
+            "__pycache__",
+        ],
+        "candidate_min_occurrences": 2,
+        "ignored_candidates": [],
+    },
+    "limits": {
+        "instruction_words": 20,
+        "descriptive_words": 25,
+        "paragraph_sentences": 6,
+        "max_warnings_per_100_words": 1.5,
+    },
+    "rules": {
+        "long_sentence": "warning",
+        "semicolon": "warning",
+        "contraction": "warning",
+        "passive_voice": "warning",
+        "ing_main_verb": "warning",
+        "nominalization": "warning",
+        "phrasal_verb": "warning",
+        "banned_word": "warning",
+        "marketing_adjective": "warning",
+        "modal_hedge": "warning",
+        "long_paragraph": "warning",
+        "em_dash": "warning",
+        "glossary_term": "error",
+    },
+    "terms": {
+        "additional_banned": [],
+        "allowed": [],
+    },
+}
+
+TEXT_SUFFIXES = {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".css",
+    ".go",
+    ".h",
+    ".hpp",
+    ".html",
+    ".java",
+    ".js",
+    ".jsx",
+    ".json",
+    ".kt",
+    ".md",
+    ".mdx",
+    ".php",
+    ".py",
+    ".rb",
+    ".rs",
+    ".rst",
+    ".scss",
+    ".sh",
+    ".swift",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
+PROSE_SUFFIXES = {".md", ".mdx", ".rst", ".txt"}
+PROSE_NAMES = {"CHANGELOG", "CONTRIBUTING", "LICENSE", "README"}
+
+
+class CliError(Exception):
+    """A configuration or input error."""
+
+
+@dataclass(frozen=True)
+class Config:
+    data: dict[str, Any]
+    sources: tuple[Path, ...]
+    project_root: Path
+
+
+@dataclass(frozen=True)
+class Diagnostic:
+    path: str
+    rule: str
+    severity: str
+    line: int
+    column: int
+    message: str
+    excerpt: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "rule": self.rule,
+            "severity": self.severity,
+            "line": self.line,
+            "column": self.column,
+            "message": self.message,
+            "excerpt": self.excerpt,
+        }
+
+
+@dataclass(frozen=True)
+class GlossaryRow:
+    term: str
+    definition: str
+    avoid: tuple[str, ...]
+    status: str
+    evidence: str
+    line: int
+
+
+def deep_copy(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: deep_copy(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return list(value)
+    return value
+
+
+def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = deep_copy(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = deep_copy(value)
+    return merged
+
+
+def nearest_project_config(start: Path) -> Path | None:
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    for directory in (current, *current.parents):
+        candidate = directory / ".agents" / "technical-writing.toml"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def nearest_repository_root(start: Path) -> Path:
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    for directory in (current, *current.parents):
+        if (directory / ".git").exists():
+            return directory
+    return current
+
+
+def load_toml(path: Path) -> dict[str, Any]:
+    if tomllib is None:
+        raise CliError("Python 3.11 or newer is required for TOML configuration")
+    try:
+        with path.open("rb") as handle:
+            value = tomllib.load(handle)
+    except FileNotFoundError as exc:
+        raise CliError(f"configuration file does not exist: {path}") from exc
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise CliError(f"cannot read configuration {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise CliError(f"configuration must be a TOML table: {path}")
+    return value
+
+
+def project_root_for_config(path: Path) -> Path:
+    if path.parent.name == ".agents":
+        return path.parent.parent.resolve()
+    return path.parent.resolve()
+
+
+def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
+    result = deep_copy(data)
+    if result.get("version") != 1:
+        raise CliError("version must be 1")
+    glossary = result.setdefault("glossary", {})
+    if not isinstance(glossary, dict):
+        raise CliError("[glossary] must be a table")
+
+    limits = result.get("limits")
+    if not isinstance(limits, dict):
+        raise CliError("[limits] must be a table")
+    for key in ("instruction_words", "descriptive_words", "paragraph_sentences"):
+        value = limits.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise CliError(f"limits.{key} must be a positive integer")
+    warning_limit = limits.get("max_warnings_per_100_words")
+    if (
+        not isinstance(warning_limit, (int, float))
+        or isinstance(warning_limit, bool)
+        or warning_limit < 0
+    ):
+        raise CliError("limits.max_warnings_per_100_words must be non-negative")
+
+    rules = result.get("rules")
+    if not isinstance(rules, dict):
+        raise CliError("[rules] must be a table")
+    unknown = set(rules) - set(RULE_IDS)
+    if unknown:
+        raise CliError(f"unknown rules in rules: {', '.join(sorted(unknown))}")
+    for rule, severity in rules.items():
+        if not isinstance(severity, str) or severity.lower() not in SEVERITIES:
+            raise CliError(
+                f"rules.{rule} must be one of: " + ", ".join(sorted(SEVERITIES))
+            )
+        rules[rule] = severity.lower()
+
+    mode = result.get("mode")
+    if mode not in ("developer", "strict"):
+        raise CliError("mode must be 'developer' or 'strict'")
+    for key in ("path",):
+        if not isinstance(glossary.get(key), str) or not glossary[key].strip():
+            raise CliError(f"glossary.{key} must be a non-empty string")
+    require_definitions = glossary.get("require_approved_definitions")
+    if not isinstance(require_definitions, bool):
+        raise CliError("glossary.require_approved_definitions must be a boolean")
+    required = glossary.get("required")
+    if not isinstance(required, bool):
+        raise CliError("glossary.required must be a boolean")
+    for key in ("scan", "exclude", "ignored_candidates"):
+        value = glossary.get(key)
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item for item in value
+        ):
+            raise CliError(f"glossary.{key} must be an array of non-empty strings")
+    minimum = glossary.get("candidate_min_occurrences")
+    if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 1:
+        raise CliError("glossary.candidate_min_occurrences must be a positive integer")
+    terms = result.get("terms")
+    if not isinstance(terms, dict):
+        raise CliError("[terms] must be a table")
+    for key in ("additional_banned", "allowed"):
+        value = terms.get(key)
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item for item in value
+        ):
+            raise CliError(f"terms.{key} must be an array of non-empty strings")
+    return result
+
+
+def load_config(explicit: str | None, cwd: Path) -> Config:
+    data = deep_copy(BUILTINS)
+    sources: list[Path] = []
+    user_path = Path(
+        os.environ.get(
+            "AGENTSTATION_TECHNICAL_WRITING_CONFIG",
+            str(Path.home() / ".config" / "agentstation" / "technical-writing.toml"),
+        )
+    ).expanduser()
+    explicit_path = Path(explicit).expanduser().resolve() if explicit else None
+    project_path = None if explicit_path else nearest_project_config(cwd)
+
+    project_root = nearest_repository_root(cwd)
+    for path in (user_path, project_path, explicit_path):
+        if path is None:
+            continue
+        if path == user_path and not path.is_file():
+            continue
+        layer = load_toml(path)
+        data = deep_merge(data, layer)
+        sources.append(path.resolve())
+        if path == project_path:
+            project_root = project_root_for_config(path)
+    return Config(normalize_config(data), tuple(sources), project_root)
+
+
+def line_column(text: str, offset: int) -> tuple[int, int]:
+    line = text.count("\n", 0, offset) + 1
+    last_newline = text.rfind("\n", 0, offset)
+    return line, offset - last_newline
+
+
+def line_excerpt(text: str, offset: int) -> str:
+    start = text.rfind("\n", 0, offset) + 1
+    end = text.find("\n", offset)
+    if end < 0:
+        end = len(text)
+    return text[start:end].strip()[:200]
+
+
+def mask_range(chars: list[str], start: int, end: int) -> None:
+    for index in range(start, end):
+        if chars[index] not in "\r\n":
+            chars[index] = " "
+
+
+def strip_code(text: str) -> str:
+    """Replace fenced and inline code with spaces while preserving offsets."""
+    chars = list(text)
+    fenced = re.compile(
+        r"^[ \t]*(?P<fence>`{3,}|~{3,})[^\n]*\n.*?"
+        r"^[ \t]*(?P=fence)[ \t]*(?:\n|$)|"
+        r"^[ \t]*(?:`{3,}|~{3,})[^\n]*\n.*\Z",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    for match in fenced.finditer(text):
+        mask_range(chars, match.start(), match.end())
+    masked = "".join(chars)
+    inline = re.compile(r"(?<!`)`+[^`\n]*?`+(?!`)")
+    for match in inline.finditer(masked):
+        mask_range(chars, match.start(), match.end())
+    return "".join(chars)
+
+
+def word_count(text: str) -> int:
+    return len(re.findall(r"[A-Za-z0-9][A-Za-z0-9'’/-]*", text))
+
+
+def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
+    """Yield prose blocks without merging adjacent Markdown structures."""
+    standalone = re.compile(r"^\s*(?:#{1,6}\s+|\|)")
+    quote = re.compile(r"^\s*>\s*")
+    lines = list(re.finditer(r".*(?:\n|\Z)", text))
+    block_start: int | None = None
+    block_end = 0
+    block_accepts_continuation = True
+
+    for match in lines:
+        line = match.group(0)
+        if not line:
+            continue
+        stripped = line.strip()
+        line_is_list_item = bool(LIST_ITEM_PATTERN.match(line))
+        line_is_standalone = bool(standalone.match(line))
+        line_is_quote = bool(quote.match(line))
+        line_starts_block = line_is_list_item or line_is_standalone or line_is_quote
+        if not stripped:
+            if block_start is not None:
+                yield block_start, block_end
+                block_start = None
+            continue
+        if block_start is None:
+            block_start = match.start()
+            block_accepts_continuation = not line_is_standalone
+        elif line_starts_block or not block_accepts_continuation:
+            yield block_start, block_end
+            block_start = match.start()
+            block_accepts_continuation = not line_is_standalone
+        block_end = match.end()
+
+    if block_start is not None:
+        yield block_start, block_end
+
+
+def sentence_spans(text: str, start: int, end: int) -> list[tuple[int, int]]:
+    content = text[start:end]
+    if re.match(r"^\s*(?:#{1,6}\s+|\|)", content):
+        return []
+    spans: list[tuple[int, int]] = []
+    position = start
+    for match in re.finditer(r"(?<=[.!?])(?<!\d\.)\s+(?=[A-Z0-9\"'(\[])", content):
+        boundary = start + match.start()
+        if text[position:boundary].strip():
+            spans.append((position, boundary))
+        position = start + match.end()
+    if text[position:end].strip():
+        spans.append((position, end))
+    return spans
+
+
+def phrase_pattern(phrase: str, *, ignore_case: bool = True) -> re.Pattern[str]:
+    return re.compile(
+        r"(?<![A-Za-z0-9_-])" + re.escape(phrase) + r"(?![A-Za-z0-9_-])",
+        re.IGNORECASE if ignore_case else 0,
+    )
+
+
+def find_phrases(
+    text: str, phrases: Iterable[str]
+) -> Iterable[tuple[str, re.Match[str]]]:
+    seen: set[tuple[int, int]] = set()
+    for phrase in sorted(set(phrases), key=lambda item: (-len(item), item.casefold())):
+        for match in phrase_pattern(phrase).finditer(text):
+            span = match.span()
+            if span not in seen:
+                seen.add(span)
+                yield phrase, match
+
+
+def make_diagnostic(
+    path: str,
+    rule: str,
+    severity: str,
+    text: str,
+    offset: int,
+    message: str,
+) -> Diagnostic:
+    line, column = line_column(text, offset)
+    return Diagnostic(
+        path,
+        rule,
+        severity,
+        line,
+        column,
+        message,
+        line_excerpt(text, offset),
+    )
+
+
+def glossary_path(config: Config, override: str | None) -> Path:
+    if override:
+        path = Path(override).expanduser()
+        return path.resolve() if path.is_absolute() else (Path.cwd() / path).resolve()
+    configured = Path(config.data["glossary"]["path"]).expanduser()
+    if configured.is_absolute():
+        raise CliError("glossary.path must be relative; use --glossary to override it")
+    resolved = (config.project_root / configured).resolve()
+    try:
+        resolved.relative_to(config.project_root)
+    except ValueError as exc:
+        raise CliError("glossary.path must stay inside the project root") from exc
+    return resolved
+
+
+def split_markdown_row(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        raise ValueError("row must start and end with '|'")
+    fields: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for character in stripped[1:-1]:
+        if escaped:
+            current.append(character)
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == "|":
+            fields.append("".join(current).strip())
+            current = []
+        else:
+            current.append(character)
+    if escaped:
+        current.append("\\")
+    fields.append("".join(current).strip())
+    return fields
+
+
+def split_aliases(value: str) -> tuple[str, ...]:
+    if not value.strip() or value.strip() in {"-", "—", "none", "None"}:
+        return ()
+    return tuple(
+        item.strip().strip("`")
+        for item in re.split(r"\s*(?:,|;|<br\s*/?>)\s*", value)
+        if item.strip()
+    )
+
+
+def parse_glossary(path: Path) -> tuple[list[GlossaryRow], list[str]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise CliError(f"glossary does not exist: {path}") from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise CliError(f"cannot read glossary {path}: {exc}") from exc
+    lines = text.splitlines()
+    required = ["term", "definition", "avoid", "status", "evidence"]
+    header_index = -1
+    for index, line in enumerate(lines):
+        try:
+            fields = [field.casefold() for field in split_markdown_row(line)]
+        except ValueError:
+            continue
+        if fields == required:
+            header_index = index
+            break
+    errors: list[str] = []
+    if header_index < 0:
+        return [], ["missing header: Term | Definition | Avoid | Status | Evidence"]
+    if header_index + 1 >= len(lines):
+        return [], ["missing Markdown table separator"]
+    try:
+        separator = split_markdown_row(lines[header_index + 1])
+    except ValueError:
+        separator = []
+    if len(separator) != 5 or not all(
+        re.fullmatch(r":?-{3,}:?", field) for field in separator
+    ):
+        errors.append("invalid Markdown table separator")
+
+    rows: list[GlossaryRow] = []
+    for index in range(header_index + 2, len(lines)):
+        line = lines[index]
+        if not line.strip():
+            continue
+        if not line.lstrip().startswith("|"):
+            if rows:
+                break
+            continue
+        try:
+            fields = split_markdown_row(line)
+        except ValueError as exc:
+            errors.append(f"line {index + 1}: {exc}")
+            continue
+        if len(fields) != 5:
+            errors.append(f"line {index + 1}: expected 5 columns, got {len(fields)}")
+            continue
+        term = fields[0].strip().strip("`")
+        if not term:
+            errors.append(f"line {index + 1}: Term is required")
+            continue
+        rows.append(
+            GlossaryRow(
+                term,
+                fields[1].strip(),
+                split_aliases(fields[2]),
+                fields[3].strip(),
+                fields[4].strip(),
+                index + 1,
+            )
+        )
+    return rows, errors
+
+
+def validate_glossary(
+    path: Path, require_approved_definitions: bool = True
+) -> tuple[list[GlossaryRow], list[str]]:
+    rows, errors = parse_glossary(path)
+    names: dict[str, tuple[str, int]] = {}
+    for row in rows:
+        status = row.status.casefold()
+        if status not in {"approved", "deprecated", "draft", "ignored"}:
+            errors.append(
+                f"line {row.line}: status must be approved, deprecated, draft, "
+                "or ignored"
+            )
+        for kind, value in (
+            ("preferred term", row.term),
+            *(("alias", alias) for alias in row.avoid),
+        ):
+            key = value.casefold()
+            previous = names.get(key)
+            if previous:
+                case_only_alias = (
+                    kind == "alias"
+                    and previous == ("preferred term", row.line)
+                    and value != row.term
+                    and value.casefold() == row.term.casefold()
+                )
+                if not case_only_alias:
+                    errors.append(
+                        f"line {row.line}: {kind} {value!r} conflicts with "
+                        f"{previous[0]} on line {previous[1]}"
+                    )
+            else:
+                names[key] = (kind, row.line)
+        if (
+            require_approved_definitions
+            and status == "approved"
+            and (
+                not row.definition.strip()
+                or row.definition.strip().casefold()
+                in {"-", "tbd", "todo", "todo: define", "unknown"}
+                or row.definition.casefold().startswith("todo:")
+            )
+        ):
+            errors.append(
+                f"line {row.line}: approved term {row.term!r} needs a definition"
+            )
+    return rows, errors
+
+
+def glossary_prohibited_terms(
+    path: Path, require_approved_definitions: bool
+) -> list[tuple[str, str, bool]]:
+    if not path.is_file():
+        return []
+    rows, errors = validate_glossary(path, require_approved_definitions)
+    if errors:
+        raise CliError(
+            f"glossary is invalid: {path}\n"
+            + "\n".join(f"- {error}" for error in errors)
+        )
+    prohibited: list[tuple[str, str, bool]] = []
+    for row in rows:
+        status = row.status.casefold()
+        if status == "approved":
+            prohibited.extend(
+                (
+                    alias,
+                    f"use the approved term {row.term!r} instead of {alias!r}",
+                    alias.casefold() == row.term.casefold(),
+                )
+                for alias in row.avoid
+            )
+        elif status == "deprecated":
+            prohibited.append(
+                (
+                    row.term,
+                    f"the term {row.term!r} is deprecated; "
+                    "use the replacement in GLOSSARY.md",
+                    False,
+                )
+            )
+    return prohibited
+
+
+def lint_text(
+    text: str,
+    path: str,
+    config: Config,
+    mode: str,
+    prohibited_terms: list[tuple[str, str, bool]],
+) -> list[Diagnostic]:
+    masked = strip_code(text)
+    rules: dict[str, str] = config.data["rules"]
+    limits: dict[str, int | float] = config.data["limits"]
+    diagnostics: list[Diagnostic] = []
+
+    def add(rule: str, offset: int, message: str) -> None:
+        severity = rules[rule]
+        if mode == "strict" and severity == "warning":
+            severity = "error"
+        if severity != "off":
+            diagnostics.append(
+                make_diagnostic(path, rule, severity, text, offset, message)
+            )
+
+    paragraphs = list(paragraph_spans(masked))
+    all_sentences: list[tuple[int, int, bool, int]] = []
+    for start, end in paragraphs:
+        spans = sentence_spans(masked, start, end)
+        list_marker = LIST_ITEM_PATTERN.match(masked[start:end])
+        instruction = list_marker is not None
+        marker_end = start + list_marker.end() if list_marker else start
+        all_sentences.extend(
+            (sentence_start, sentence_end, instruction, marker_end)
+            for sentence_start, sentence_end in spans
+        )
+        if len(spans) > int(limits["paragraph_sentences"]):
+            add(
+                "long_paragraph",
+                start,
+                f"paragraph has {len(spans)} sentences; "
+                f"limit is {limits['paragraph_sentences']}",
+            )
+    for start, end, instruction, marker_end in all_sentences:
+        sentence_text = masked[max(start, marker_end) : end]
+        count = word_count(sentence_text)
+        limit_key = "instruction_words" if instruction else "descriptive_words"
+        sentence_limit = int(limits[limit_key])
+        if count > sentence_limit:
+            add(
+                "long_sentence",
+                start,
+                f"sentence has {count} words; limit is {sentence_limit}",
+            )
+
+    simple_patterns: tuple[tuple[str, re.Pattern[str], str], ...] = (
+        ("semicolon", re.compile(r";"), "replace the semicolon with a period"),
+        (
+            "contraction",
+            re.compile(
+                r"(?<![A-Za-z0-9_])(?:"
+                + "|".join(
+                    re.escape(item).replace("'", "['’]") for item in CONTRACTIONS
+                )
+                + r")(?![A-Za-z0-9_])",
+                re.IGNORECASE,
+            ),
+            "expand the contraction",
+        ),
+        (
+            "passive_voice",
+            re.compile(
+                r"\b(?:am|is|are|was|were|be|been|being)\s+"
+                r"(?!(?:red)\b)"
+                r"(?:\w+ed|done|made|sent|read|built|kept|held|set|put|run|"
+                r"written|shown|given|taken|found|got|gotten|seen|known|thrown|drawn)"
+                r"\b",
+                re.IGNORECASE,
+            ),
+            "use active voice when the actor is known",
+        ),
+        (
+            "ing_main_verb",
+            re.compile(
+                r"\b(?:am|is|are|was|were|be|been|being)\s+"
+                r"(?!(?:nothing|something|anything|everything)\b)\w+ing\b",
+                re.IGNORECASE,
+            ),
+            "prefer a simple verb form",
+        ),
+        (
+            "nominalization",
+            re.compile(
+                r"\b(?:perform(?:s|ed)?|conduct(?:s|ed)?|"
+                r"carry out|carries out|make use of|makes use of)\b|"
+                r"\b\w{4,}(?:tion|ment|ance|ence)\s+of\b",
+                re.IGNORECASE,
+            ),
+            "express the action with a direct verb",
+        ),
+        ("em_dash", re.compile("—"), "replace the em dash with explicit structure"),
+    )
+    for rule, pattern, message in simple_patterns:
+        if rules[rule] == "off":
+            continue
+        for match in pattern.finditer(masked):
+            add(rule, match.start(), message)
+
+    phrase_groups = (
+        ("phrasal_verb", PHRASAL, "use a direct verb"),
+        (
+            "banned_word",
+            (*BANNED, *config.data["terms"]["additional_banned"]),
+            "use a short, precise alternative",
+        ),
+        (
+            "marketing_adjective",
+            MARKETING,
+            "replace the promotional claim with a verified fact",
+        ),
+        (
+            "modal_hedge",
+            MODAL_HEDGE,
+            "state the known fact or exact condition",
+        ),
+    )
+    allowed = {term.casefold() for term in config.data["terms"]["allowed"]}
+    for rule, phrases, message in phrase_groups:
+        if rules[rule] == "off":
+            continue
+        active_phrases = [
+            phrase for phrase in phrases if phrase.casefold() not in allowed
+        ]
+        for phrase, match in find_phrases(masked, active_phrases):
+            add(rule, match.start(), f"{message}: {phrase!r}")
+
+    for prohibited, message, case_sensitive in prohibited_terms:
+        for match in phrase_pattern(
+            prohibited, ignore_case=not case_sensitive
+        ).finditer(masked):
+            add(
+                "glossary_term",
+                match.start(),
+                message,
+            )
+    return sorted(
+        diagnostics,
+        key=lambda item: (item.path, item.line, item.column, item.rule),
+    )
+
+
+def expand_lint_inputs(arguments: list[str]) -> list[tuple[str, str]]:
+    if not arguments:
+        return [("<stdin>", sys.stdin.read())]
+    expanded: list[Path | str] = []
+    for argument in arguments:
+        if argument == "-":
+            expanded.append("-")
+            continue
+        matches = glob.glob(os.path.expanduser(argument), recursive=True)
+        if not matches:
+            path = Path(argument).expanduser()
+            if not path.exists():
+                raise CliError(f"input does not exist or match any file: {argument}")
+            matches = [str(path)]
+        for match in sorted(matches):
+            path = Path(match)
+            if path.is_dir():
+                expanded.extend(
+                    child
+                    for child in sorted(path.rglob("*"))
+                    if child.is_file()
+                    and (
+                        child.suffix.lower() in PROSE_SUFFIXES
+                        or child.name in PROSE_NAMES
+                    )
+                )
+            elif path.is_file():
+                expanded.append(path)
+    results: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    stdin_used = False
+    for item in expanded:
+        if item == "-":
+            if stdin_used:
+                continue
+            stdin_used = True
+            results.append(("<stdin>", sys.stdin.read()))
+            continue
+        path = Path(item).resolve()
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            results.append((key, path.read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError) as exc:
+            raise CliError(f"cannot read input {path}: {exc}") from exc
+    if not results:
+        raise CliError("no input files")
+    return results
+
+
+def lint_fails(
+    diagnostics: Iterable[Diagnostic],
+    mode: str,
+    word_total: int,
+    warning_limit: float,
+) -> bool:
+    items = list(diagnostics)
+    if any(item.severity == "error" for item in items):
+        return True
+    warnings = sum(item.severity == "warning" for item in items)
+    rate = warnings * 100.0 / max(word_total, 100)
+    effective_limit = 0.0 if mode == "strict" else warning_limit
+    return rate > effective_limit
+
+
+def command_lint(args: argparse.Namespace, config: Config) -> int:
+    mode = args.mode or config.data["mode"]
+    if mode not in ("developer", "strict"):
+        raise CliError("mode must be 'developer' or 'strict'")
+    glossary = glossary_path(config, args.glossary)
+    if args.glossary and not glossary.is_file():
+        raise CliError(f"explicit glossary does not exist: {glossary}")
+    if config.data["glossary"]["required"] and not glossary.is_file():
+        raise CliError(f"required glossary does not exist: {glossary}")
+    prohibited = glossary_prohibited_terms(
+        glossary, config.data["glossary"]["require_approved_definitions"]
+    )
+    documents = expand_lint_inputs(args.paths)
+    results: list[dict[str, Any]] = []
+    all_diagnostics: list[Diagnostic] = []
+    word_total = sum(word_count(strip_code(text)) for _, text in documents)
+    warning_limit = float(config.data["limits"]["max_warnings_per_100_words"])
+    for path, text in documents:
+        document_terms = (
+            []
+            if path != "<stdin>" and Path(path).resolve() == glossary.resolve()
+            else prohibited
+        )
+        diagnostics = lint_text(text, path, config, mode, document_terms)
+        all_diagnostics.extend(diagnostics)
+        document_words = word_count(strip_code(text))
+        results.append(
+            {
+                "path": path,
+                "words": document_words,
+                "diagnostics": [item.as_dict() for item in diagnostics],
+                "passed": not lint_fails(
+                    diagnostics, mode, document_words, warning_limit
+                ),
+            }
+        )
+    failed = any(not result["passed"] for result in results)
+    warning_count = sum(item.severity == "warning" for item in all_diagnostics)
+    warning_rate = round(warning_count * 100.0 / max(word_total, 100), 2)
+    if args.format == "json":
+        payload = {
+            "mode": mode,
+            "passed": not failed,
+            "documents": results,
+            "summary": {
+                "files": len(results),
+                "diagnostics": len(all_diagnostics),
+                "errors": sum(item.severity == "error" for item in all_diagnostics),
+                "warnings": sum(item.severity == "warning" for item in all_diagnostics),
+                "warning_rate_per_100_words": warning_rate,
+                "max_warnings_per_100_words": (
+                    0.0 if mode == "strict" else warning_limit
+                ),
+            },
+            "config_sources": [str(path) for path in config.sources],
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        for item in all_diagnostics:
+            print(
+                f"{item.path}:{item.line}:{item.column}: "
+                f"{item.severity} {item.rule}: {item.message}"
+            )
+        status = "FAIL" if failed else "PASS"
+        print(
+            f"{status}: {len(results)} file(s), {len(all_diagnostics)} " "diagnostic(s)"
+        )
+    return 1 if failed else 0
+
+
+def path_is_excluded(relative: Path, patterns: list[str]) -> bool:
+    posix = relative.as_posix()
+    return any(
+        fnmatch.fnmatch(posix, pattern)
+        or any(part == pattern for part in relative.parts)
+        or fnmatch.fnmatch(relative.name, pattern)
+        for pattern in patterns
+    )
+
+
+def scan_files(config: Config, glossary: Path) -> list[Path]:
+    settings = config.data["glossary"]
+    patterns: list[str] = settings["scan"]
+    excludes: list[str] = settings["exclude"]
+    found: set[Path] = set()
+    for pattern in patterns:
+        candidate = config.project_root / pattern
+        matches = (
+            [Path(item) for item in glob.glob(str(candidate), recursive=True)]
+            if glob.has_magic(pattern)
+            else [candidate]
+        )
+        for match in matches:
+            if not match.exists():
+                continue
+            paths = match.rglob("*") if match.is_dir() else (match,)
+            for path in paths:
+                if not path.is_file() or path.resolve() == glossary.resolve():
+                    continue
+                try:
+                    relative = path.resolve().relative_to(config.project_root)
+                except ValueError:
+                    continue
+                if path_is_excluded(relative, excludes):
+                    continue
+                if path.suffix.lower() in TEXT_SUFFIXES or path.name in {
+                    "Dockerfile",
+                    "Makefile",
+                    "go.mod",
+                }:
+                    found.add(path.resolve())
+    return sorted(found)
+
+
+def manifest_package_names(path: Path, text: str) -> list[str]:
+    names: list[str] = []
+    if path.name == "package.json":
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return names
+        if isinstance(data, dict):
+            if isinstance(data.get("name"), str):
+                names.append(data["name"])
+            for key in ("dependencies", "devDependencies", "peerDependencies"):
+                values = data.get(key)
+                if isinstance(values, dict):
+                    names.extend(name for name in values if isinstance(name, str))
+    elif path.name == "pyproject.toml" and tomllib is not None:
+        try:
+            data = tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            return names
+        project = data.get("project", {})
+        poetry = data.get("tool", {}).get("poetry", {})
+        for table in (project, poetry):
+            if isinstance(table, dict) and isinstance(table.get("name"), str):
+                names.append(table["name"])
+    elif path.name == "Cargo.toml" and tomllib is not None:
+        try:
+            data = tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            return names
+        package = data.get("package", {})
+        if isinstance(package, dict) and isinstance(package.get("name"), str):
+            names.append(package["name"])
+    elif path.name == "go.mod":
+        match = re.search(r"(?m)^\s*module\s+(\S+)", text)
+        if match:
+            names.append(match.group(1))
+    return names
+
+
+def extract_candidates(path: Path, text: str) -> set[str]:
+    candidates = set(manifest_package_names(path, text))
+    prose = path.suffix.lower() in PROSE_SUFFIXES or path.name in PROSE_NAMES
+    if prose:
+        for match in re.finditer(r"`([^`\n]+)`", text):
+            value = match.group(1).strip()
+            if re.fullmatch(r"[@A-Za-z_][@A-Za-z0-9_:-]{1,79}", value) and (
+                any(character in value for character in "-_:@")
+                or re.search(r"[A-Z]", value)
+            ):
+                candidates.add(value)
+    shared_patterns = (
+        r"\b[A-Z][A-Z0-9]{1,}\b",
+        r"\b[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+\b",
+    )
+    for pattern in shared_patterns:
+        candidates.update(re.findall(pattern, text))
+    if prose:
+        for pattern in (
+            r"\b[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)+\b",
+            r"(?<![-\w])[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)+(?![-\w])",
+            r"(?<![-\w])@[a-zA-Z0-9-]+/[a-zA-Z0-9-]+(?![-\w])",
+        ):
+            candidates.update(re.findall(pattern, text))
+    else:
+        candidates.update(
+            re.findall(
+                r"\b(?:class|interface|type|enum|struct|trait|protocol)\s+"
+                r"([A-Z][A-Za-z0-9]*)\b",
+                text,
+            )
+        )
+    return {
+        value
+        for value in candidates
+        if len(value) >= 2
+        and not value.startswith(("http://", "https://"))
+        and value not in {"TODO", "README"}
+    }
+
+
+def discover_terms(config: Config, glossary: Path) -> list[tuple[str, list[str]]]:
+    minimum = config.data["glossary"]["candidate_min_occurrences"]
+    ignored = {
+        term.casefold() for term in config.data["glossary"]["ignored_candidates"]
+    }
+    counts: Counter[str] = Counter()
+    evidence: dict[str, set[str]] = defaultdict(set)
+    display: dict[str, Counter[str]] = defaultdict(Counter)
+    for path in scan_files(config, glossary):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        relative = path.relative_to(config.project_root).as_posix()
+        for value in extract_candidates(path, text):
+            occurrence_count = len(
+                re.findall(
+                    r"(?<![A-Za-z0-9_-])" + re.escape(value) + r"(?![A-Za-z0-9_-])",
+                    text,
+                )
+            )
+            if occurrence_count:
+                key = value.casefold()
+                counts[key] += occurrence_count
+                evidence[key].add(relative)
+                display[key][value] += occurrence_count
+    results: list[tuple[str, list[str]]] = []
+    for key, count in counts.items():
+        if count < minimum or key in ignored:
+            continue
+        term = sorted(display[key].items(), key=lambda item: (-item[1], item[0]))[0][0]
+        results.append((term, sorted(evidence[key])[:3]))
+    return sorted(results, key=lambda item: item[0].casefold())
+
+
+def markdown_cell(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
+
+
+def glossary_document(candidates: list[tuple[str, list[str]]]) -> str:
+    lines = [
+        "# Glossary",
+        "",
+        "| Term | Definition | Avoid | Status | Evidence |",
+        "|---|---|---|---|---|",
+    ]
+    for term, evidence in candidates:
+        lines.append(
+            f"| {markdown_cell(term)} | TODO: Define {markdown_cell(term)}. | "
+            f"| Draft | {markdown_cell(', '.join(evidence))} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def missing_candidates(
+    config: Config, glossary: Path, rows: list[GlossaryRow]
+) -> list[tuple[str, list[str]]]:
+    known = {value.casefold() for row in rows for value in (row.term, *row.avoid)}
+    return [
+        candidate
+        for candidate in discover_terms(config, glossary)
+        if candidate[0].casefold() not in known
+    ]
+
+
+def command_glossary_init(args: argparse.Namespace, config: Config) -> int:
+    path = glossary_path(config, args.path)
+    if path.exists():
+        raise CliError(f"refusing to overwrite existing glossary: {path}")
+    candidates = discover_terms(config, path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(glossary_document(candidates))
+    except FileExistsError as exc:
+        raise CliError(f"refusing to overwrite existing glossary: {path}") from exc
+    except OSError as exc:
+        raise CliError(f"cannot create glossary {path}: {exc}") from exc
+    print(f"created {path} with {len(candidates)} draft term(s)")
+    return 0
+
+
+def command_glossary_check(args: argparse.Namespace, config: Config) -> int:
+    path = glossary_path(config, args.path)
+    rows, errors = validate_glossary(
+        path, config.data["glossary"]["require_approved_definitions"]
+    )
+    if args.format == "json":
+        print(
+            json.dumps(
+                {
+                    "path": str(path),
+                    "passed": not errors,
+                    "terms": len(rows),
+                    "errors": errors,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        for error in errors:
+            print(f"{path}: {error}")
+        print(
+            f"{'PASS' if not errors else 'FAIL'}: {path} "
+            f"({len(rows)} term(s), {len(errors)} error(s))"
+        )
+    return 1 if errors else 0
+
+
+def command_glossary_update(args: argparse.Namespace, config: Config) -> int:
+    path = glossary_path(config, args.path)
+    rows, errors = validate_glossary(
+        path, config.data["glossary"]["require_approved_definitions"]
+    )
+    if errors:
+        raise CliError(
+            f"glossary is invalid: {path}\n"
+            + "\n".join(f"- {error}" for error in errors)
+        )
+    missing = missing_candidates(config, path, rows)
+    if args.check:
+        for term, evidence in missing:
+            print(f"missing: {term} ({', '.join(evidence)})")
+        if missing:
+            print(f"FAIL: {len(missing)} candidate term(s) are missing from {path}")
+            return 1
+        print(f"PASS: no candidate terms are missing from {path}")
+        return 0
+    if not missing:
+        print(f"unchanged {path}; no candidate terms are missing")
+        return 0
+    try:
+        original = path.read_text(encoding="utf-8")
+        new_rows = ""
+        for term, evidence in missing:
+            new_rows += (
+                f"| {markdown_cell(term)} | TODO: Define {markdown_cell(term)}. | "
+                f"| Draft | {markdown_cell(', '.join(evidence))} |\n"
+            )
+        lines = original.splitlines(keepends=True)
+        header_index = next(
+            (index for index, line in enumerate(lines) if _is_glossary_header(line)),
+            -1,
+        )
+        if header_index < 0:
+            raise CliError(f"glossary table is missing from {path}")
+        insertion_line = header_index + 2
+        while insertion_line < len(lines) and lines[insertion_line].lstrip().startswith(
+            "|"
+        ):
+            insertion_line += 1
+        insertion_offset = sum(len(line) for line in lines[:insertion_line])
+        prefix = original[:insertion_offset]
+        suffix = original[insertion_offset:]
+        if prefix and not prefix.endswith("\n"):
+            prefix += "\n"
+        path.write_text(prefix + new_rows + suffix, encoding="utf-8")
+    except OSError as exc:
+        raise CliError(f"cannot update glossary {path}: {exc}") from exc
+    print(f"updated {path} with {len(missing)} draft term(s)")
+    return 0
+
+
+def _is_glossary_header(line: str) -> bool:
+    try:
+        return [field.casefold() for field in split_markdown_row(line)] == [
+            "term",
+            "definition",
+            "avoid",
+            "status",
+            "evidence",
+        ]
+    except ValueError:
+        return False
+
+
+def extract_explicit_config(argv: list[str]) -> tuple[list[str], str | None]:
+    cleaned: list[str] = []
+    explicit: str | None = None
+    index = 0
+    while index < len(argv):
+        argument = argv[index]
+        if argument == "--config":
+            if index + 1 >= len(argv):
+                raise CliError("--config requires a path")
+            explicit = argv[index + 1]
+            index += 2
+            continue
+        if argument.startswith("--config="):
+            explicit = argument.partition("=")[2]
+            if not explicit:
+                raise CliError("--config requires a path")
+            index += 1
+            continue
+        cleaned.append(argument)
+        index += 1
+    return cleaned, explicit
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="technical-writing",
+        description="Lint technical prose and maintain a project glossary.",
+    )
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="layer this TOML file over user and project configuration",
+    )
+    subcommands = parser.add_subparsers(dest="command", required=True)
+
+    lint_parser = subcommands.add_parser("lint", help="lint Markdown or text")
+    lint_parser.add_argument("paths", nargs="*", help="files, directories, globs, or -")
+    lint_parser.add_argument("--mode", choices=("developer", "strict"))
+    lint_parser.add_argument("--format", choices=("text", "json"), default="text")
+    lint_parser.add_argument("--glossary", help="override the glossary path")
+
+    glossary_parser = subcommands.add_parser("glossary", help="maintain GLOSSARY.md")
+    glossary_commands = glossary_parser.add_subparsers(
+        dest="glossary_command", required=True
+    )
+    init_parser = glossary_commands.add_parser(
+        "init", help="create an absent glossary with draft candidates"
+    )
+    init_parser.add_argument("path", nargs="?", help="override the glossary path")
+
+    update_parser = glossary_commands.add_parser(
+        "update", help="find codebase terms missing from the glossary"
+    )
+    update_parser.add_argument("path", nargs="?", help="override the glossary path")
+    update_mode = update_parser.add_mutually_exclusive_group(required=True)
+    update_mode.add_argument(
+        "--check", action="store_true", help="report missing terms without writing"
+    )
+    update_mode.add_argument(
+        "--write", action="store_true", help="append missing terms as draft rows"
+    )
+
+    check_parser = glossary_commands.add_parser(
+        "check", help="validate glossary structure and approved terms"
+    )
+    check_parser.add_argument("path", nargs="?", help="override the glossary path")
+    check_parser.add_argument("--format", choices=("text", "json"), default="text")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    try:
+        cleaned_argv, explicit = extract_explicit_config(raw_argv)
+        parser = build_parser()
+        args = parser.parse_args(cleaned_argv)
+        if explicit is None:
+            explicit = args.config
+        config = load_config(explicit, Path.cwd())
+        if args.command == "lint":
+            return command_lint(args, config)
+        if args.glossary_command == "init":
+            return command_glossary_init(args, config)
+        if args.glossary_command == "update":
+            return command_glossary_update(args, config)
+        if args.glossary_command == "check":
+            return command_glossary_check(args, config)
+        raise CliError("unknown command")
+    except CliError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

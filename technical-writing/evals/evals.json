@@ -1,0 +1,222 @@
+{
+  "skill_name": "technical-writing",
+  "evals": [
+    {
+      "id": "developer-progress",
+      "category": "developer-communication",
+      "smoke": true,
+      "prompt": "Write a progress update for a software engineer. The implementation is complete. All 187 tests are running. No result is available.",
+      "expected_output": "A direct update that preserves the unknown test result.",
+      "protected_literals": ["187"],
+      "forbidden_literals": ["tests passed", "all green", "successful test run"],
+      "assertions": [
+        "The result appears before the current activity.",
+        "The response does not convert running tests into passed tests."
+      ]
+    },
+    {
+      "id": "readme-introduction",
+      "category": "structure",
+      "smoke": true,
+      "prompt": "Write a README introduction from these facts only. fluxcache compares prompt meaning. It returns a cached response when similarity meets a configured threshold. This can reduce model calls, cost, and response time.",
+      "expected_output": "A concrete introduction that explains behavior before benefits.",
+      "protected_literals": ["fluxcache", "configured threshold"],
+      "forbidden_literals": ["seamless", "vendor lock-in", "enterprise-grade"],
+      "assertions": [
+        "The response explains the matching behavior.",
+        "The response contains only supplied benefits."
+      ]
+    },
+    {
+      "id": "api-limit-error",
+      "category": "factual-integrity",
+      "smoke": true,
+      "prompt": "Write an API error. The account limit is 100 requests per minute. The request exceeded the limit. The response includes Retry-After with the wait time.",
+      "expected_output": "An error that states the limit, failure, and supported recovery action.",
+      "protected_literals": ["100 requests per minute", "Retry-After"],
+      "forbidden_literals": ["fair access", "temporary outage", "network"],
+      "assertions": [
+        "The response states the known cause.",
+        "The response gives only the supported recovery action."
+      ]
+    },
+    {
+      "id": "unknown-error-cause",
+      "category": "factual-integrity",
+      "smoke": true,
+      "prompt": "Rewrite this developer error: \"The upload failed. Try again.\" The cause is unknown.",
+      "expected_output": "A concise error that keeps the cause unknown.",
+      "protected_literals": [],
+      "forbidden_literals": ["10 MB", "file type", "network connection"],
+      "assertions": [
+        "The response does not invent a cause.",
+        "The response does not invent a recovery guarantee."
+      ]
+    },
+    {
+      "id": "strict-procedure",
+      "category": "procedure",
+      "smoke": true,
+      "prompt": "Use strict mode. Write a numbered procedure. If the status light is red, disconnect power. After power is disconnected, remove the cover.",
+      "expected_output": "A numbered procedure with conditions before actions and one action per step.",
+      "protected_literals": [],
+      "forbidden_literals": [],
+      "assertions": [
+        "The red-light condition appears before the disconnect command.",
+        "The cover removal occurs only after power disconnection.",
+        "The output passes the linter in strict mode."
+      ]
+    },
+    {
+      "id": "glossary-preferred-term",
+      "category": "terminology",
+      "smoke": true,
+      "prompt": "The project glossary approves \"repository\" and marks \"repo\" as an avoided alias. Write one sentence that tells the user to clone the repository.",
+      "expected_output": "A sentence that uses repository and does not use repo as a standalone term.",
+      "protected_literals": ["repository"],
+      "forbidden_literals": ["repo"],
+      "assertions": [
+        "The response uses the approved term.",
+        "The response does not use the avoided alias."
+      ]
+    },
+    {
+      "id": "pr-boundary",
+      "category": "factual-integrity",
+      "smoke": true,
+      "prompt": "Write a two-sentence PR summary. Request coalescing was added to cache.get. Concurrent misses for one key share one upstream request. cache.set is unchanged.",
+      "expected_output": "A two-sentence summary that states changed and unchanged behavior.",
+      "protected_literals": ["cache.get", "cache.set"],
+      "forbidden_literals": ["TTL", "latency", "eviction"],
+      "assertions": [
+        "The response preserves each identifier.",
+        "The response does not add a performance claim."
+      ]
+    },
+    {
+      "id": "exact-command",
+      "category": "exact-content",
+      "smoke": true,
+      "prompt": "Use only these supplied facts. `git clean -fdx` removes untracked and ignored files. Put the effect before the exact command.",
+      "expected_output": "The effect followed by the unchanged command.",
+      "protected_literals": ["git clean -fdx"],
+      "forbidden_literals": [
+        "recoverable",
+        "undo",
+        "permanent",
+        "git checkout",
+        "git reset",
+        "dry run",
+        "git clean -ndx"
+      ],
+      "assertions": [
+        "The effect appears before the command.",
+        "The command remains exact."
+      ]
+    },
+    {
+      "id": "technical-web-page",
+      "category": "structure",
+      "smoke": false,
+      "prompt": "Write a technical product-page paragraph. The service accepts OpenTelemetry traces over OTLP/HTTP. It stores traces for 30 days. It supports region selection in us-east-1 and eu-west-1. Do not add marketing claims.",
+      "expected_output": "A factual paragraph for a technical audience with exact protocols, duration, and regions.",
+      "protected_literals": ["OTLP/HTTP", "30 days", "us-east-1", "eu-west-1"],
+      "forbidden_literals": ["seamless", "powerful", "world-class"],
+      "assertions": [
+        "The response preserves the technical values.",
+        "The response adds no unsupplied benefit."
+      ]
+    },
+    {
+      "id": "diagnosis-uncertainty",
+      "category": "developer-communication",
+      "smoke": false,
+      "prompt": "Use only these supplied facts to summarize the diagnosis. The trace shows a 401 after token expiry. The retry path has not been inspected. A second failure is possible but unverified.",
+      "expected_output": "A diagnosis that separates evidence from the unverified possibility.",
+      "protected_literals": ["401", "retry path"],
+      "forbidden_literals": ["root cause", "fully resolved"],
+      "assertions": [
+        "The response identifies the observed failure.",
+        "The response keeps the second failure unverified."
+      ]
+    },
+    {
+      "id": "release-note",
+      "category": "structure",
+      "smoke": false,
+      "prompt": "Write a release note. Version 2.4 adds dark mode and fixes a crash during CSV export. Do not add a heading or closing sentence.",
+      "expected_output": "Direct release text with both supplied changes and no framing.",
+      "protected_literals": ["2.4", "dark mode", "CSV export"],
+      "forbidden_literals": ["revolutionary", "In summary"],
+      "assertions": [
+        "The response includes both changes.",
+        "The response has no preamble or closing statement."
+      ]
+    },
+    {
+      "id": "already-conformant",
+      "category": "restraint",
+      "smoke": false,
+      "prompt": "Edit only if needed: \"The migration updated 42 rows. It reported no errors.\"",
+      "expected_output": "The original text without a preamble or unnecessary rewrite.",
+      "protected_literals": ["The migration updated 42 rows. It reported no errors."],
+      "forbidden_literals": ["Revised", "Summary"],
+      "assertions": [
+        "The response preserves conforming text.",
+        "The response adds no framing."
+      ]
+    },
+    {
+      "id": "comment-scope",
+      "category": "exact-content",
+      "smoke": false,
+      "prompt": "Rename `n` to `retryCount` in `const n = attempts.length`. Do not add comments or change other code.",
+      "expected_output": "Only the requested identifier change.",
+      "protected_literals": ["retryCount", "attempts.length"],
+      "forbidden_literals": ["//", "/*"],
+      "assertions": [
+        "The response does not add prose to code.",
+        "The requested identifier is exact."
+      ]
+    },
+    {
+      "id": "glossary-required-term",
+      "category": "terminology",
+      "smoke": false,
+      "prompt": "Use only these supplied facts. The glossary defines OCC as \"optimistic concurrency control\" and requires the full term on first use. An OCC conflict retries the transaction.",
+      "expected_output": "A sentence that expands the term on first use and preserves the acronym.",
+      "protected_literals": ["OCC"],
+      "forbidden_literals": ["optimistic conflict checking"],
+      "assertions": [
+        "The response follows the glossary definition.",
+        "The response does not invent a different expansion."
+      ]
+    },
+    {
+      "id": "developer-mode-not-marketing",
+      "category": "mode-selection",
+      "smoke": false,
+      "prompt": "A developer asks what the cache does. Use only these supplied facts: exact-key hits return the stored response. Misses call the upstream model. Do not write marketing copy.",
+      "expected_output": "A short developer-mode explanation of the two behaviors.",
+      "protected_literals": ["upstream model"],
+      "forbidden_literals": ["unlock", "supercharge", "effortless"],
+      "assertions": [
+        "The response selects developer mode.",
+        "The response contains no promotional claim."
+      ]
+    },
+    {
+      "id": "nontechnical-boundary",
+      "category": "mode-selection",
+      "smoke": false,
+      "prompt": "Write two lines of fictional dialogue between a sailor and a ghost. Do not use the technical-writing style.",
+      "expected_output": "Fictional dialogue that does not apply controlled technical prose.",
+      "protected_literals": [],
+      "forbidden_literals": [],
+      "assertions": [
+        "The skill yields because the task is not technical writing.",
+        "The output follows the requested fictional form."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+version = 1
+mode = "developer"
+
+[limits]
+instruction_words = 20
+descriptive_words = 25
+paragraph_sentences = 6
+max_warnings_per_100_words = 1.5
+
+[rules]
+long_sentence = "error"
+semicolon = "error"
+contraction = "error"
+passive_voice = "warning"
+ing_main_verb = "warning"
+nominalization = "warning"
+phrasal_verb = "warning"
+banned_word = "error"
+marketing_adjective = "error"
+modal_hedge = "error"
+long_paragraph = "error"
+em_dash = "error"
+glossary_term = "error"
+
+[terms]
+additional_banned = []
+allowed = []
+
+[glossary]
+path = "GLOSSARY.md"
+required = true
+require_approved_definitions = true
+candidate_min_occurrences = 2
+ignored_candidates = [
+  "agent-skills",
+  "AGENTS",
+  "AGENTS_HOME",
+  "API",
+  "architecture-sensitive",
+  "ASD",
+  "automatic-selection",
+  "avoid_same_host",
+  "build-with-claude",
+  "built-in",
+  "claude-code",
+  "claude-opus-5",
+  "Claude-side",
+  "CLI",
+  "code-review",
+  "CONFIG",
+  "deepswe_avg_cost_usd",
+  "developer-facing",
+  "GitHub",
+  "GLOSSARY",
+  "GPT",
+  "GPT-5",
+  "HOME",
+  "ID",
+  "ignored_candidates",
+  "isolation-safe",
+  "long-lived",
+  "manual_approval_required",
+  "MODEL_SELECTION",
+  "P0",
+  "PR",
+  "pre-PR",
+  "project-specific",
+  "prompt-engineering",
+  "second-model",
+  "security-panel",
+  "self-tests",
+  "SKILL",
+  "STE100",
+  "substantive-code",
+  "substantive_only",
+  "technical-artifacts",
+  "technical-writing",
+  "TECHNICAL_WRITING",
+  "UPSTREAM",
+]
+scan = [
+  "README.md",
+  "AGENTS.md",
+  "autoreview/**/*.md",
+  "technical-writing/**/*.md",
+]
+exclude = [
+  ".git/**",
+  "**/__pycache__/**",
+  "**/evals/**",
+  "**/tests/**",
+]

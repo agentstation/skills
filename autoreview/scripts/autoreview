@@ -51,7 +51,7 @@ SAFE_GIT_CONFIG_ARGS = (
     "-c",
     "pager.show=cat",
 )
-SAFE_DIFF_FLAGS = ("--no-ext-diff", "--no-textconv", "--no-renames")
+SAFE_DIFF_FLAGS = ("--no-ext-diff", "--no-textconv", "--find-renames=90%")
 DIFF_HUNK_CONTENT_BOUNDARY = "\0autoreview-diff-hunk-boundary\0"
 LOCAL_DIFF_VALIDATION_BOUNDARY = "\n[autoreview local diff validation boundary]\n"
 ENGINE_GIT_CONFIG_OVERRIDES = (
@@ -3499,7 +3499,6 @@ def mask_shell_heredoc_bodies(text: str) -> str:
             r"(?P=quote)",
             content,
         ):
-            quote = match.group("quote")
             prefix = content[: match.start()]
             shell_segment = re.split(r"[;|&]", prefix)[-1].strip()
             first_word = (
@@ -4546,7 +4545,6 @@ def uri_password_is_format_placeholder(
         password,
     )
     if field_match is not None:
-        field = field_match.group("field")
         format_call = re.match(
             r"\s*\.format\s*\((?P<args>.*?)\)",
             suffix,
