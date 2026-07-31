@@ -108,7 +108,7 @@ class AutoreviewHardeningTests(unittest.TestCase):
 
         self.assertEqual([item[0] for item in selected], ["opus5"])
 
-    def test_fable_profile_is_explicit_only(self) -> None:
+    def test_fable_profile_requires_manual_approval(self) -> None:
         config = self.helper["deep_merge_review_config"](
             self.helper["BUILTIN_REVIEW_CONFIG"],
             {},
@@ -123,7 +123,7 @@ class AutoreviewHardeningTests(unittest.TestCase):
             globals_dict,
             {"engine_binary": lambda _args, engine: f"/trusted/{engine}"},
         ):
-            with self.assertRaisesRegex(SystemExit, "explicit-only"):
+            with self.assertRaisesRegex(SystemExit, "manual approval"):
                 self.helper["select_profile_candidates"](
                     config,
                     args,
@@ -138,6 +138,58 @@ class AutoreviewHardeningTests(unittest.TestCase):
             )
 
         self.assertEqual([item[0] for item in selected], ["fable5"])
+
+    def test_lower_literal_cost_scores_higher(self) -> None:
+        candidate = {
+            "intelligence": 8,
+            "taste": 8,
+            "deepswe_pass_rate": 60,
+            "cost": 1,
+        }
+        expensive = {**candidate, "cost": 10}
+
+        self.assertGreater(
+            self.helper["candidate_score"](candidate),
+            self.helper["candidate_score"](expensive),
+        )
+
+    def test_auto_profile_excludes_manual_approval_even_if_score_is_highest(
+        self,
+    ) -> None:
+        config = self.helper["deep_merge_review_config"](
+            self.helper["BUILTIN_REVIEW_CONFIG"],
+            {
+                "candidates": {
+                    "fable5": {
+                        "cost": 0,
+                        "intelligence": 10,
+                        "taste": 10,
+                        "deepswe_pass_rate": 100,
+                    }
+                }
+            },
+        )
+        args = argparse.Namespace(
+            codex_bin="codex",
+            claude_bin="claude",
+            pi_bin="pi",
+        )
+        globals_dict = self.helper["scored_candidates"].__globals__
+        with mock.patch.dict(
+            globals_dict,
+            {
+                "engine_binary": lambda _args, engine: f"/trusted/{engine}",
+                "detected_host_engine": lambda: "codex",
+            },
+        ):
+            selected = self.helper["select_profile_candidates"](
+                config,
+                args,
+                "auto",
+                profile_explicit=False,
+            )
+
+        self.assertEqual([item[0] for item in selected], ["opus5"])
 
     def test_anthropic_effort_cap_applies_through_other_harnesses(self) -> None:
         args = argparse.Namespace(

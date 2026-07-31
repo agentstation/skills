@@ -912,72 +912,78 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "codex",
             "model": "gpt-5.6-sol",
             "effort": "high",
-            "automatic": True,
-            "cost": 9.0,
+            "manual_approval": False,
+            "cost": 3.8,
             "intelligence": 9.0,
             "taste": 8.5,
             "deepswe_pass_rate": 69.0,
+            "deepswe_avg_cost_usd": 3.47,
         },
         "opus5": {
             "engine": "claude",
             "model": "claude-opus-5",
             "effort": "high",
-            "automatic": True,
-            "cost": 4.0,
+            "manual_approval": False,
+            "cost": 6.6,
             "intelligence": 9.0,
             "taste": 9.0,
             "deepswe_pass_rate": 73.0,
+            "deepswe_avg_cost_usd": 6.08,
         },
         "terra": {
             "engine": "codex",
             "model": "gpt-5.6-terra",
             "effort": "high",
-            "automatic": True,
-            "cost": 9.0,
+            "manual_approval": False,
+            "cost": 1.0,
             "intelligence": 8.0,
             "taste": 8.0,
             "deepswe_pass_rate": 54.0,
+            "deepswe_avg_cost_usd": 0.91,
         },
         "luna": {
             "engine": "codex",
             "model": "gpt-5.6-luna",
             "effort": "high",
-            "automatic": True,
-            "cost": 10.0,
+            "manual_approval": False,
+            "cost": 0.2,
             "intelligence": 6.0,
             "taste": 7.0,
             "deepswe_pass_rate": 44.0,
+            "deepswe_avg_cost_usd": 0.16,
         },
         "opus48": {
             "engine": "claude",
             "model": "claude-opus-4-8",
             "effort": "high",
-            "automatic": True,
-            "cost": 4.0,
+            "manual_approval": False,
+            "cost": 4.7,
             "intelligence": 7.0,
             "taste": 8.0,
             "deepswe_pass_rate": 52.0,
+            "deepswe_avg_cost_usd": 4.28,
         },
         "sonnet5": {
             "engine": "claude",
             "model": "claude-sonnet-5",
             "effort": "high",
-            "automatic": True,
-            "cost": 5.0,
+            "manual_approval": False,
+            "cost": 8.1,
             "intelligence": 5.0,
             "taste": 7.0,
             "deepswe_pass_rate": 48.0,
+            "deepswe_avg_cost_usd": 7.43,
         },
         "fable5": {
             "engine": "claude",
             "model": "claude-fable-5",
             "effort": "high",
-            "automatic": False,
-            "explicit_only": True,
-            "cost": 2.0,
+            "manual_approval": True,
+            "cost": 10.0,
             "intelligence": 9.0,
             "taste": 9.0,
             "deepswe_pass_rate": 69.0,
+            "deepswe_avg_cost_usd": 9.18,
         },
     },
 }
@@ -12145,6 +12151,11 @@ def validate_review_config(config: dict[str, Any]) -> None:
             raise SystemExit(
                 f"candidate {name!r} uses invalid {engine} effort {effort!r}"
             )
+        for policy_name in ("manual_approval", "explicit_only", "automatic"):
+            if policy_name in candidate and not isinstance(candidate[policy_name], bool):
+                raise SystemExit(
+                    f"candidate {name!r} {policy_name} must be boolean"
+                )
         for score_name in ("cost", "intelligence", "taste"):
             score = candidate.get(score_name)
             if not isinstance(score, (int, float)) or not 0 <= float(score) <= 10:
@@ -12155,6 +12166,21 @@ def validate_review_config(config: dict[str, Any]) -> None:
         if not isinstance(pass_rate, (int, float)) or not 0 <= float(pass_rate) <= 100:
             raise SystemExit(
                 f"candidate {name!r} deepswe_pass_rate must be between 0 and 100"
+            )
+        avg_cost = candidate.get("deepswe_avg_cost_usd")
+        if avg_cost is not None and (
+            not isinstance(avg_cost, (int, float)) or float(avg_cost) < 0
+        ):
+            raise SystemExit(
+                f"candidate {name!r} deepswe_avg_cost_usd must be non-negative"
+            )
+        if (
+            isinstance(model, str)
+            and "fable" in model.casefold()
+            and not candidate_requires_manual_approval(candidate)
+        ):
+            raise SystemExit(
+                f"candidate {name!r} uses Fable and must set manual_approval = true"
             )
     for name, profile in profiles.items():
         if not isinstance(profile, dict):
@@ -12184,7 +12210,16 @@ def candidate_score(candidate: dict[str, Any]) -> float:
         0.45 * float(candidate["intelligence"])
         + 0.25 * float(candidate["taste"])
         + 0.20 * (float(candidate["deepswe_pass_rate"]) / 10.0)
-        + 0.10 * float(candidate["cost"])
+        + 0.10 * (10.0 - float(candidate["cost"]))
+    )
+
+
+def candidate_requires_manual_approval(candidate: dict[str, Any]) -> bool:
+    """Honor the current field plus legacy config written before version 1."""
+    return bool(
+        candidate.get("manual_approval", False)
+        or candidate.get("explicit_only", False)
+        or candidate.get("automatic") is False
     )
 
 
@@ -12225,7 +12260,7 @@ def scored_candidates(
     args: argparse.Namespace,
     *,
     include_same_host: bool,
-    include_explicit_only: bool,
+    manual_approval_granted: bool,
     engine: str | None = None,
 ) -> list[tuple[str, dict[str, Any], float]]:
     policy = config["policy"]
@@ -12241,9 +12276,10 @@ def scored_candidates(
             continue
         if engine_binary(args, candidate_engine) is None:
             continue
-        if not candidate.get("automatic", True) and not include_explicit_only:
-            continue
-        if candidate.get("explicit_only", False) and not include_explicit_only:
+        if (
+            candidate_requires_manual_approval(candidate)
+            and not manual_approval_granted
+        ):
             continue
         if (
             not include_same_host
@@ -12288,7 +12324,7 @@ def select_profile_candidates(
             config,
             args,
             include_same_host=False,
-            include_explicit_only=False,
+            manual_approval_granted=False,
         )
         selected: list[tuple[str, dict[str, Any], float]] = []
         used_engines: set[str] = set()
@@ -12313,13 +12349,10 @@ def select_profile_candidates(
     for candidate_name in profile["candidates"]:
         candidate = copy.deepcopy(config["candidates"][candidate_name])
         candidate["engine"] = normalize_engine(candidate["engine"])
-        if (
-            candidate.get("explicit_only", False)
-            or not candidate.get("automatic", True)
-        ) and not profile_explicit:
+        if candidate_requires_manual_approval(candidate) and not profile_explicit:
             raise SystemExit(
-                f"candidate {candidate_name!r} is explicit-only; request it with "
-                f"--profile {profile_name}"
+                f"candidate {candidate_name!r} requires manual approval; approve "
+                f"it by explicitly requesting --profile {profile_name}"
             )
         if candidate["engine"] not in SAFE_AUTOMATIC_ENGINES:
             raise SystemExit(
@@ -12357,7 +12390,7 @@ def configure_reviewers(
                 config,
                 args,
                 include_same_host=True,
-                include_explicit_only=False,
+                manual_approval_granted=False,
                 engine=engine,
             )
             if candidates:
@@ -12734,8 +12767,9 @@ def enforce_reviewer_policy(
         model = str(reviewer.model or "")
         if "fable" in model.lower() and not getattr(args, "fable_explicit", False):
             raise SystemExit(
-                "Fable is explicit-only because its credits are scarce; request "
-                "it with --profile fable or an explicit --model/--reviewers value"
+                "Fable requires manual approval because its credits are scarce; "
+                "approve it with --profile fable or an explicit --model/--reviewers "
+                "value"
             )
         fallback_models = str(reviewer.fallback_model or "").split(",")
         if any("fable" in fallback.lower() for fallback in fallback_models):
@@ -12999,7 +13033,7 @@ def self_test_config_defaults() -> None:
                 "self-test config defaults failed: implicit Fable accepted"
             )
         except SystemExit as error:
-            if "explicit-only" not in str(error):
+            if "manual approval" not in str(error):
                 raise
         policy_args.fable_explicit = True
         enforce_reviewer_policy([fable], policy_args)

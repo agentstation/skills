@@ -63,10 +63,10 @@ the current host agent. The built-in profiles are:
 "$AUTOREVIEW" --profile fable
 ```
 
-Fable is available only through an explicit profile or model request and is
-never selected automatically or used as a fallback. Built-in Claude policy caps
-effort at `high`; a config can consciously change that cap. Other supported
-models and harnesses can be registered as candidates in config.
+Fable requires manual approval through an explicit profile or model request and
+is never selected automatically or used as a fallback. Built-in Claude policy
+caps effort at `high`; a config can consciously change that cap. Other
+supported models and harnesses can be registered as candidates in config.
 
 Read [`MODEL_SELECTION.md`](MODEL_SELECTION.md) when changing score axes,
 candidate defaults, effort policy, or benchmark inputs.

@@ -46,7 +46,7 @@ candidates = ["sol", "opus5"]
 ```
 
 Select it with `--profile security-panel`. Exact profiles fail closed if a
-required harness is unavailable. A candidate marked `explicit_only = true`
+required harness is unavailable. A candidate marked `manual_approval = true`
 requires an explicit `--profile`; it cannot become an automatic default.
 
 ## Candidates
@@ -56,20 +56,36 @@ requires an explicit `--profile`; it cannot become an automatic default.
 engine = "claude"
 model = "claude-opus-5"
 effort = "high"
-automatic = true
-cost = 4
+manual_approval = false
+cost = 6.6
 intelligence = 9
 taste = 9
 deepswe_pass_rate = 73
+deepswe_avg_cost_usd = 6.08
 ```
+
+`engine` identifies the isolation harness: `claude` means the Claude Code CLI
+and `codex` means the Codex CLI. `model` is the model invoked through that
+harness. The candidate table name is a stable ID for the complete reviewer
+configuration, not another model field.
+
+`cost` is literal on a 0–10 scale derived from DeepSWE's measured average cost
+per high-effort task: 0 is free and 10 is the most expensive candidate. Preserve
+the underlying measurement in `deepswe_avg_cost_usd`. Lower cost improves the
+automatic-selection score. `manual_approval` is a separate safety gate and does
+not affect the score. See [`MODEL_SELECTION.md`](MODEL_SELECTION.md) for the
+normalization formula and source data.
 
 Supported engines remain governed by the helper's isolation checks. At present,
 Codex, Claude, and a sufficiently recent Pi CLI can be automatic candidates.
 Other bundled adapters fail closed until their CLIs can prove equivalent
 isolation.
 
-Fable candidates must set `explicit_only = true` and `automatic = false`.
-Fable is also refused in fallback chains.
+Fable candidates must set `manual_approval = true`. Approval is granted by an
+explicit `--profile`, `--model`, or `--reviewers` request. Fable is also refused
+in fallback chains because fallback invocation is automatic. The legacy
+`explicit_only` and `automatic = false` fields remain recognized when reading
+older config, but new config should use `manual_approval`.
 
 ## Policy
 

@@ -7,7 +7,8 @@
 - Keep repository-specific criteria out of this skill. Profiles such as Nimbus
   belong in their owning repository and invoke this helper with explicit
   criteria.
-- Keep Fable explicit-only and unavailable to automatic selection or fallback.
+- Keep Fable behind manual approval and unavailable to automatic selection or
+  fallback.
 - Keep built-in Claude effort at or below `high`; higher caps must be conscious
   configuration.
 - Keep the default automatic cadence at the substantive-code pre-PR gate.

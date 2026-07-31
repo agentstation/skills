@@ -12,9 +12,11 @@ anthropic_max_effort = "high"
 [profiles.security-panel]
 candidates = ["sol", "opus5"]
 
-# Override owner-effective scores without copying the built-in candidate.
+# Override DeepSWE cost inputs and owner scores without copying the candidate.
 [candidates.sol]
-cost = 9
+manual_approval = false
+cost = 3.8
 intelligence = 9
 taste = 8.5
 deepswe_pass_rate = 69
+deepswe_avg_cost_usd = 3.47
