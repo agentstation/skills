@@ -17,7 +17,7 @@ Copy `config.example.toml` to create a project configuration:
 
 ```bash
 mkdir -p .agents
-cp ~/.agents/skills/agentstation-technical-writing/config.example.toml \
+cp ~/.agents/skills/technical-writing/config.example.toml \
   .agents/technical-writing.toml
 ```
 

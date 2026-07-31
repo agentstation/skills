@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that every skills/*/SKILL.md has YAML frontmatter with name + description."""
+"""Validate each top-level skill directory and its required frontmatter."""
 from __future__ import annotations
 
 import sys
@@ -22,10 +22,9 @@ def parse_frontmatter(text: str) -> dict[str, str] | None:
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
-    skills_dir = repo_root / "skills"
     errors: list[str] = []
     checked = 0
-    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+    for skill_md in sorted(repo_root.glob("*/SKILL.md")):
         checked += 1
         fm = parse_frontmatter(skill_md.read_text(encoding="utf-8"))
         if fm is None:

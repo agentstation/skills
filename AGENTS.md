@@ -1,6 +1,6 @@
 # AgentStation Skills
 
-Canonical reusable skills live under `skills/<name>/SKILL.md`.
+Canonical reusable skills live under `<name>/SKILL.md`.
 
 - Keep global skills product-agnostic.
 - Put project-specific profiles in the owning project's skills repository.
@@ -13,4 +13,4 @@ Canonical reusable skills live under `skills/<name>/SKILL.md`.
 ## Technical writing
 
 Use `GLOSSARY.md` for developer-facing prose. Run the installed
-`agentstation-technical-writing` linter on durable technical text.
+`technical-writing` linter on durable technical text.

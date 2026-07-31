@@ -14,7 +14,7 @@ Add a short project instruction:
 ## Technical writing
 
 Use `GLOSSARY.md` for developer-facing prose. Run the installed
-`agentstation-technical-writing` linter on durable technical text.
+`technical-writing` linter on durable technical text.
 ```
 
 ## Format
@@ -40,7 +40,7 @@ Separate multiple aliases or evidence paths with a comma.
 Set the installed helper path:
 
 ```bash
-export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/agentstation-technical-writing/scripts/technical-writing"
+export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/technical-writing/scripts/technical-writing"
 ```
 
 Create a glossary when none exists:

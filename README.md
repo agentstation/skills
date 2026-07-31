@@ -6,7 +6,7 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 
 - `autoreview`: isolated, structured second-model review with layered model
   profiles and a substantive-code pre-PR gate.
-- `agentstation-technical-writing`: controlled, lintable developer writing for
+- `technical-writing`: controlled, lintable developer writing for
   agent responses, documentation, technical web pages, procedures, and other
   technical prose.
 
@@ -19,7 +19,7 @@ npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code
 Install the default writing style for Codex, Claude Code, and Goose:
 
 ```bash
-npx skills add agentstation/skills --skill agentstation-technical-writing -g \
+npx skills add agentstation/skills --skill technical-writing -g \
   -a codex -a claude-code -a goose -y
 ```
 
@@ -29,7 +29,7 @@ Add this small bootstrap to each harness's persistent user instructions:
 ```markdown
 ## Default writing style
 
-Use the installed `agentstation-technical-writing` skill for all
+Use the installed `technical-writing` skill for all
 developer-facing prose. Apply `developer` mode to every response for a
 technical user. Use `strict` mode for procedures, safety text, and tightly
 controlled errors. Preserve facts, uncertainty, glossary terms, identifiers,
@@ -50,14 +50,14 @@ canonical copy.
 The linter requires Python 3.11 or later. Set its path after installation:
 
 ```bash
-export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/agentstation-technical-writing/scripts/technical-writing"
+export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/technical-writing/scripts/technical-writing"
 ```
 
 Copy the example to set a user-wide default:
 
 ```bash
 mkdir -p ~/.config/agentstation
-cp ~/.agents/skills/agentstation-technical-writing/config.example.toml \
+cp ~/.agents/skills/technical-writing/config.example.toml \
   ~/.config/agentstation/technical-writing.toml
 ```
 
@@ -73,7 +73,7 @@ A repository can override that file with
 The initializer adds draft candidates. A person must define and approve each
 real project term. Put reviewed scanner noise in `ignored_candidates`.
 
-To migrate from the earlier name, install `agentstation-technical-writing`,
+To migrate from the earlier name, install `technical-writing`,
 update the persistent instruction, verify a fresh session, and then remove the
 old skill:
 
@@ -95,5 +95,7 @@ The global skill lock records source and content metadata. It does not pin a
 GitHub commit. Review upstream changes before a global update when
 reproducibility matters.
 
-The repository uses the standard `skills/<name>/SKILL.md` layout. See each
-skill's `UPSTREAM.md` for derivative provenance.
+The repository uses the Agent Skills `<name>/SKILL.md` layout at its root. The
+`skills` CLI discovers this flat collection and verifies that each frontmatter
+name matches its directory. See each skill's `UPSTREAM.md` for derivative
+provenance.

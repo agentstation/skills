@@ -80,11 +80,12 @@ ignored_candidates = [
 scan = [
   "README.md",
   "AGENTS.md",
-  "skills/**/*.md",
+  "autoreview/**/*.md",
+  "technical-writing/**/*.md",
 ]
 exclude = [
   ".git/**",
   "**/__pycache__/**",
-  "skills/**/evals/**",
-  "skills/**/tests/**",
+  "**/evals/**",
+  "**/tests/**",
 ]

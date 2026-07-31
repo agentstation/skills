@@ -120,7 +120,7 @@ def main() -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 1
-    print("ok: agentstation-technical-writing skill and eval manifest valid")
+    print("ok: technical-writing skill and eval manifest valid")
     return 0
 
 

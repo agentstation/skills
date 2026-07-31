@@ -1,9 +1,9 @@
 ---
-name: agentstation-technical-writing
+name: technical-writing
 description: Use this skill for developer-facing technical writing and communication. Apply it to responses for technical users, documentation, READMEs, API text, runbooks, PRs, issues, release notes, error messages, technical web pages, comments, and docstrings. Use developer mode by default and strict mode for procedures, safety text, and tightly controlled errors. Do not apply it to marketing, fiction, or other voice-led prose.
 ---
 
-# AgentStation technical writing
+# Technical writing
 
 Use a controlled writing system instead of a vague request to "write clearly."
 The linter verifies mechanical rules. A human or agent must still verify facts,
@@ -32,7 +32,7 @@ Protect source content:
 6. Set the helper path:
 
    ```bash
-   export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/agentstation-technical-writing/scripts/technical-writing"
+   export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/technical-writing/scripts/technical-writing"
    ```
 
 7. For a file or substantive draft, run:
