@@ -153,7 +153,7 @@ class AutoreviewHardeningTests(unittest.TestCase):
             self.helper["candidate_score"](expensive),
         )
 
-    def test_auto_profile_excludes_manual_approval_even_if_score_is_highest(
+    def test_auto_profile_excludes_manual_approval_required_candidate(
         self,
     ) -> None:
         config = self.helper["deep_merge_review_config"](

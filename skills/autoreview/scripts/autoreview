@@ -912,7 +912,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "codex",
             "model": "gpt-5.6-sol",
             "effort": "high",
-            "manual_approval": False,
+            "manual_approval_required": False,
             "cost": 3.8,
             "intelligence": 9.0,
             "taste": 8.5,
@@ -923,7 +923,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "claude",
             "model": "claude-opus-5",
             "effort": "high",
-            "manual_approval": False,
+            "manual_approval_required": False,
             "cost": 6.6,
             "intelligence": 9.0,
             "taste": 9.0,
@@ -934,7 +934,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "codex",
             "model": "gpt-5.6-terra",
             "effort": "high",
-            "manual_approval": False,
+            "manual_approval_required": False,
             "cost": 1.0,
             "intelligence": 8.0,
             "taste": 8.0,
@@ -945,7 +945,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "codex",
             "model": "gpt-5.6-luna",
             "effort": "high",
-            "manual_approval": False,
+            "manual_approval_required": False,
             "cost": 0.2,
             "intelligence": 6.0,
             "taste": 7.0,
@@ -956,7 +956,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "claude",
             "model": "claude-opus-4-8",
             "effort": "high",
-            "manual_approval": False,
+            "manual_approval_required": False,
             "cost": 4.7,
             "intelligence": 7.0,
             "taste": 8.0,
@@ -967,7 +967,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "claude",
             "model": "claude-sonnet-5",
             "effort": "high",
-            "manual_approval": False,
+            "manual_approval_required": False,
             "cost": 8.1,
             "intelligence": 5.0,
             "taste": 7.0,
@@ -978,7 +978,7 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "engine": "claude",
             "model": "claude-fable-5",
             "effort": "high",
-            "manual_approval": True,
+            "manual_approval_required": True,
             "cost": 10.0,
             "intelligence": 9.0,
             "taste": 9.0,
@@ -12151,7 +12151,12 @@ def validate_review_config(config: dict[str, Any]) -> None:
             raise SystemExit(
                 f"candidate {name!r} uses invalid {engine} effort {effort!r}"
             )
-        for policy_name in ("manual_approval", "explicit_only", "automatic"):
+        for policy_name in (
+            "manual_approval_required",
+            "manual_approval",
+            "explicit_only",
+            "automatic",
+        ):
             if policy_name in candidate and not isinstance(candidate[policy_name], bool):
                 raise SystemExit(
                     f"candidate {name!r} {policy_name} must be boolean"
@@ -12180,7 +12185,8 @@ def validate_review_config(config: dict[str, Any]) -> None:
             and not candidate_requires_manual_approval(candidate)
         ):
             raise SystemExit(
-                f"candidate {name!r} uses Fable and must set manual_approval = true"
+                f"candidate {name!r} uses Fable and must set "
+                "manual_approval_required = true"
             )
     for name, profile in profiles.items():
         if not isinstance(profile, dict):
@@ -12217,7 +12223,8 @@ def candidate_score(candidate: dict[str, Any]) -> float:
 def candidate_requires_manual_approval(candidate: dict[str, Any]) -> bool:
     """Honor the current field plus legacy config written before version 1."""
     return bool(
-        candidate.get("manual_approval", False)
+        candidate.get("manual_approval_required", False)
+        or candidate.get("manual_approval", False)
         or candidate.get("explicit_only", False)
         or candidate.get("automatic") is False
     )

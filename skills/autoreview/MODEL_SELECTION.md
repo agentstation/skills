@@ -29,7 +29,7 @@ cost = 10 × model average cost per task ÷ Fable average cost per task
 The July 30, 2026 snapshot uses DeepSWE's current cost corrections and rounds
 the normalized score to one decimal. Subscription scarcity is a separate policy
 concern. Fable's current Claude plan treatment is unusually restrictive, but
-that affects `manual_approval`, not its measured cost score.
+that affects `manual_approval_required`, not its measured cost score.
 
 ## Candidate snapshot
 
@@ -40,7 +40,7 @@ effort, scores, and approval policy. The harness and model are separate.
 Candidates are ordered by intelligence descending; taste and pass rate break
 intelligence ties:
 
-| candidate ID | intelligence | harness | model | effort | avg cost/task | cost | manual approval | taste | DeepSWE pass |
+| candidate ID | intelligence | harness | model | effort | avg cost/task | cost | manual approval required | taste | DeepSWE pass |
 | --- | ---: | --- | --- | :---: | ---: | ---: | :---: | ---: | ---: |
 | `opus5` | 9 | Claude Code CLI | Opus 5 | high | $6.08 | 6.6 | no | 9 | 73% |
 | `fable5` | 9 | Claude Code CLI | Fable 5 | high | $9.18 | 10 | yes | 9 | 69% |

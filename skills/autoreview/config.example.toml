@@ -14,7 +14,7 @@ candidates = ["sol", "opus5"]
 
 # Override DeepSWE cost inputs and owner scores without copying the candidate.
 [candidates.sol]
-manual_approval = false
+manual_approval_required = false
 cost = 3.8
 intelligence = 9
 taste = 8.5
