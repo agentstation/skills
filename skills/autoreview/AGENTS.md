@@ -4,9 +4,8 @@
 - Record the imported upstream commit in `UPSTREAM.md`.
 - Sync upstream into a clean branch, then reapply and test the AgentStation
   model policy and any accepted hardening patches.
-- Keep repository-specific criteria out of this skill. Profiles such as Nimbus
-  belong in their owning repository and invoke this helper with explicit
-  criteria.
+- Keep repository-specific criteria and named project profiles in their owning
+  repositories; they should invoke this helper with explicit criteria.
 - Keep Fable behind manual approval and unavailable to automatic selection or
   fallback.
 - Reserve Fable for architectural review, architectural planning, and

@@ -60,7 +60,7 @@ effort and matching benchmark inputs.
 | model | candidate ID | intelligence | taste | harness | effort | when to use | cost/task | manual approval required |
 | --- | --- | ---: | ---: | --- | :---: | --- | ---: | :---: |
 | Fable 5 | `fable5` | 10 | 9 | Claude Code CLI | high | Manual architectural review, planning, or orchestration only | $9.18 | yes |
-| GPT-5.6 Sol | `sol` | 9 | 8 | Codex CLI | xhigh | Complex or high-risk review; Nimbus Codex candidate | $4.70 | no |
+| GPT-5.6 Sol | `sol` | 9 | 8 | Codex CLI | xhigh | Complex, high-risk, or intelligence-critical review | $4.70 | no |
 | GPT-5.6 Sol | `sol` | 8.5 | 8 | Codex CLI | high | Default automatic reviewer when the host is Claude | $3.47 | no |
 | Opus 5 | `opus5` | 8 | 8.5 | Claude Code CLI | high | Default code reviewer when the host is Codex | $6.08 | no |
 | GPT-5.6 Terra | `terra` | 8 | 7 | Codex CLI | max | `value` profile for near-frontier quality at lower cost | $3.96 | no |
@@ -72,9 +72,10 @@ The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
 - Opus 5 high is the default code-review sweet spot. It matches xhigh at 73%
   while saving $2.99 per task, stays within the Anthropic ceiling, and uses the
   Claude allocation intended for code review.
-- Sol high remains the standard Codex reviewer. Sol xhigh is the complex-task
-  sweet spot and is used by Nimbus; max buys only two more pass points for
-  another $3.69 over xhigh.
+- Sol high remains the standard Codex reviewer. Sol xhigh is the sweet spot
+  when complexity, risk, or required reviewer intelligence justifies the
+  additional cost; max buys only two more pass points for another $3.69 over
+  xhigh.
 - Terra max is the value profile: 70% at $3.96.
 - Luna max is the budget profile: 67% at only $0.61. Its lower efforts remain
   on the mathematical cost/pass frontier, but are not credible PR review
