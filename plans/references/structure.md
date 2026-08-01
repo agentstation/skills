@@ -195,8 +195,8 @@ Add these sections when the plan needs them:
 
 A campaign plan spans several pull requests. It requires phase 0: pin the
 baseline commit, create the proof root, author the verifier red, capture
-fail-before evidence, and change no production behavior. Commit the ledger
-at every transition.
+fail-before evidence, and change no production behavior. Record each ledger
+transition per the commit convention in [`execution.md`](execution.md).
 
 A single session plan delivers one pull request. It may use a flat task
 list and update the ledger at completion. It keeps the same sections and
@@ -208,4 +208,4 @@ When the repository keeps a plans directory, maintain an index README that
 routes work. The index answers two questions: which plan owns the work, and
 in what order the plans run. Keep exactly one owner plan per topic. Keep
 history out of the index so it stays readable as the current control plane.
-Update the index in the same commit as any plan lifecycle change.
+Update the index in the same change as any plan lifecycle transition.

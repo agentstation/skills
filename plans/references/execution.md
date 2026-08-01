@@ -50,7 +50,7 @@ branch, and the completion gate exactly.
 5. Read the task's files before you edit. Implement at the owning seam.
 6. Capture fail-before evidence, then run the task's verification
    commands.
-7. Commit the work per the commit policy in the goal block.
+7. Commit the work per the commit convention.
 8. Write the task's proof file. Append an execution log entry with the
    work commit and the test counts.
 9. Set the task terminal with evidence in the ledger row. Commit the
@@ -65,9 +65,13 @@ you continue.
 
 ## Commit convention
 
-Record each ledger transition as its own plan commit, right after the
-work commit it records. The subject encodes the transition and the next
-active task:
+The goal block's commit policy governs every commit this skill names.
+When the policy withholds commits, keep the work and the plan edits in
+the worktree, and cite the verification counts as evidence.
+
+Under a policy that permits commits, record each ledger transition as its
+own plan commit, right after the work commit it records. The subject
+encodes the transition and the next active task:
 
 ```text
 plan: <ID> done (PR #N); <NEXT> in_progress
@@ -76,10 +80,6 @@ plan: <ID> done (PR #N); <NEXT> in_progress
 A separate plan commit can cite the work commit and pull request it
 records. It also makes `git log` a readable execution timeline and a
 resume marker that survives any context loss.
-
-Both commits follow the goal block's commit policy. When the policy
-withholds commits, keep the plan edits in the worktree and cite the
-verification counts as evidence.
 
 ## Discoveries and scope
 

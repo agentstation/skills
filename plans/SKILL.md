@@ -40,8 +40,8 @@ Markdown is the fallback when the repository requires it.
 - Keep one status token per ledger cell, with the proof in the evidence
   cell.
 - Keep exactly one task `in_progress` per plan during autonomous work.
-- Record each ledger transition in a plan commit right after the work
-  commit it records.
+- When the commit policy permits, record each ledger transition in a plan
+  commit right after its work commit.
 - Record evidence with exact counts and names. Mark checks that could not
   run `UNVERIFIED` instead of counting them green.
 - Keep the plan a thin control plane. Move narrative evidence to the
