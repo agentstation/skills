@@ -9,9 +9,11 @@ The linter checks:
 
 - sentence and paragraph limits.
 - contractions, semicolons, and em dashes.
-- passive voice and `-ing` main-verb patterns.
+- passive voice, complex verb forms, and `-ing` main-verb patterns.
 - nominalisations and selected phrasal verbs.
 - vague formal words, marketing adjectives, and modal hedges.
+- selected stock phrases, assistant scaffolds, and negative parallelism.
+- restricted words when they occur.
 - glossary aliases that conflict with an approved term.
 
 The linter must exit with status `0`. Review each suppression or configuration
@@ -28,10 +30,21 @@ Confirm each item:
 4. Each glossary term has one meaning in this document.
 5. Required identifiers, commands, values, and units are exact.
 6. Each instruction contains one action.
-7. Each condition or warning appears before its action.
-8. The sequence is complete and safe.
-9. The document contains all information that the audience needs.
-10. The document contains no filler, repeated conclusion, or unsupported claim.
+7. Multiple actions in one instruction occur at the same time.
+8. Each condition or warning appears before its action.
+9. Each sentence keeps its necessary subject, verb, and articles.
+10. Each multi-word noun has no more than three words, or it is an approved
+    technical noun.
+11. A longer approved technical noun has a clear shorter form when applicable.
+12. Each descriptive sentence has one subject.
+13. The sequence is complete and safe.
+14. The document contains all information that the audience needs.
+15. The document contains no imaginary misconception or invented contrast.
+16. The document contains no rhetorical fragment or ornamental copula.
+17. The document contains no near-synonym triad used only for rhythm.
+18. The document contains no filler, repeated conclusion, or unsupported claim.
+19. A reviewer checked each contextual vocabulary choice in its technical use.
+20. Each intentional rule exception states the accuracy or terminology reason.
 
 ## Result
 

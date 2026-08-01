@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import copy
 import importlib.util
+import io
 import json
 import os
 import runpy
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest import mock
@@ -115,6 +117,147 @@ class AutoreviewPriorityTests(unittest.TestCase):
         self.assertEqual(report["findings"], [])
         self.assertEqual(report["overall_correctness"], "patch is correct")
         self.assertIn("below the requested P0", report["overall_explanation"])
+
+
+class AutoreviewHarnessCapabilityTests(unittest.TestCase):
+    def harness_args(self) -> argparse.Namespace:
+        return argparse.Namespace(
+            codex_bin="codex",
+            claude_bin="claude",
+            pi_bin="pi",
+            opencode_bin="opencode",
+            cursor_bin="cursor-agent",
+            install_if_missing=False,
+        )
+
+    def test_missing_desktop_only_harness_is_not_automatic_eligible(self) -> None:
+        args = self.harness_args()
+        with (
+            mock.patch.object(
+                AUTOREVIEW,
+                "engine_binary",
+                side_effect=lambda _args, engine: (
+                    "/usr/bin/codex" if engine == "codex" else None
+                ),
+            ),
+            mock.patch.object(
+                AUTOREVIEW,
+                "detected_desktop_app",
+                side_effect=lambda engine: (
+                    ("installed", "/Applications/Cursor.app")
+                    if engine == "cursor"
+                    else ("no", None)
+                ),
+            ),
+            mock.patch.object(
+                AUTOREVIEW,
+                "harness_version",
+                return_value="1.0.0",
+            ),
+        ):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                AUTOREVIEW.print_harnesses(args)
+        cursor_row = next(
+            line for line in output.getvalue().splitlines()
+            if line.startswith("cursor\t")
+        )
+        self.assertIn("\tno\tinstalled\tno\tdesktop-only\t", cursor_row)
+
+    def test_missing_cursor_error_distinguishes_desktop_from_cli(self) -> None:
+        args = self.harness_args()
+        with mock.patch.object(
+            AUTOREVIEW,
+            "detected_desktop_app",
+            return_value=("installed", "/Applications/Cursor.app"),
+        ):
+            message = AUTOREVIEW.harness_unavailable_message(args, "cursor")
+        self.assertIn("harness_unavailable engine=cursor", message)
+        self.assertIn("desktop=installed", message)
+        self.assertIn("desktop application is not a headless", message)
+        self.assertIn("--install-harness cursor", message)
+
+    def test_pi_installer_uses_current_package_without_lifecycle_scripts(self) -> None:
+        args = self.harness_args()
+        with (
+            mock.patch.object(
+                AUTOREVIEW,
+                "engine_binary",
+                side_effect=[None, "/tmp/pi"],
+            ),
+            mock.patch.object(AUTOREVIEW.shutil, "which", return_value="/usr/bin/npm"),
+            mock.patch.object(AUTOREVIEW, "run_installer_command") as run_installer,
+        ):
+            with redirect_stdout(io.StringIO()):
+                installed = AUTOREVIEW.install_harness(args, "pi")
+        self.assertEqual(installed, "/tmp/pi")
+        command = run_installer.call_args.args[0]
+        self.assertEqual(
+            command,
+            [
+                "/usr/bin/npm",
+                "install",
+                "-g",
+                "--ignore-scripts",
+                "@earendil-works/pi-coding-agent",
+            ],
+        )
+
+    def test_install_if_missing_is_explicit_opt_in(self) -> None:
+        args = self.harness_args()
+        args.install_if_missing = True
+        reviewer = argparse.Namespace(engine="cursor")
+        with (
+            mock.patch.object(AUTOREVIEW, "engine_binary", return_value=None),
+            mock.patch.object(
+                AUTOREVIEW,
+                "install_harness",
+                return_value="/tmp/cursor-agent",
+            ) as install,
+        ):
+            AUTOREVIEW.ensure_reviewer_harnesses(args, [reviewer])
+        install.assert_called_once_with(args, "cursor")
+
+    def test_scored_profile_installs_highest_ranked_missing_harness_with_opt_in(
+        self,
+    ) -> None:
+        args = self.harness_args()
+        args.install_if_missing = True
+        available = {"codex"}
+
+        def binary_for(_args: argparse.Namespace, engine: str) -> str | None:
+            return f"/tmp/{engine}" if engine in available else None
+
+        def install(_args: argparse.Namespace, engine: str) -> str:
+            available.add(engine)
+            return f"/tmp/{engine}"
+
+        config = copy.deepcopy(AUTOREVIEW.BUILTIN_REVIEW_CONFIG)
+        with (
+            mock.patch.object(
+                AUTOREVIEW,
+                "engine_binary",
+                side_effect=binary_for,
+            ),
+            mock.patch.object(
+                AUTOREVIEW,
+                "detected_host_engine",
+                return_value="codex",
+            ),
+            mock.patch.object(
+                AUTOREVIEW,
+                "install_harness",
+                side_effect=install,
+            ) as installer,
+        ):
+            selected = AUTOREVIEW.select_profile_candidates(
+                config,
+                args,
+                "auto",
+                profile_explicit=False,
+            )
+        installer.assert_called_once_with(args, "claude")
+        self.assertEqual([item[0] for item in selected], ["opus5"])
 
 
 class AutoreviewSecretScannerTests(unittest.TestCase):
@@ -267,11 +410,11 @@ class AutoreviewCompatibilityTests(unittest.TestCase):
                 os.environ[key] = value
         cls.home_dir.cleanup()
 
-    def test_harness_rejects_disabled_cursor_engine(self) -> None:
+    def test_harness_accepts_cursor_engine(self) -> None:
         harness_path = SCRIPT_PATH.with_name("test-review-harness.py")
         namespace = runpy.run_path(str(harness_path))
-        with self.assertRaises(SystemExit):
-            namespace["parse_args"](["--engine", "cursor"])
+        args = namespace["parse_args"](["--engine", "cursor"])
+        self.assertEqual(args.engines, ["cursor"])
 
     def test_cursor_agent_bin_cli_alias(self) -> None:
         with mock.patch.object(
@@ -590,95 +733,95 @@ class AutoreviewCompatibilityTests(unittest.TestCase):
         self.assertFalse(AUTOREVIEW.is_structured_output_failure("review JSON missing required key: findings"))
         self.assertFalse(AUTOREVIEW.is_structured_output_failure("finding 0 has invalid priority"))
 
-    def test_cursor_workspace_instructions_fail_closed(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="autoreview-cursor-test.") as tmpdir:
-            repo = Path(tmpdir)
-            args = argparse.Namespace(
-                thinking=None,
-                tools=True,
-                web_search=True,
-                cursor_allow_workspace_instructions=False,
-                cursor_bin="cursor-agent",
-                model="auto",
-                stream_engine_output=False,
-            )
-            with self.assertRaises(SystemExit) as exc_info:
-                AUTOREVIEW.run_cursor(args, repo, "prompt")
-            self.assertIn("cursor engine is unavailable", str(exc_info.exception))
+    def test_cursor_review_config_denies_host_tools(self) -> None:
+        config = AUTOREVIEW.cursor_review_config(True)
+        denied = set(config["permissions"]["deny"])
+        for permission in (
+            "Delete(*)",
+            "Grep(*)",
+            "LS(*)",
+            "Mcp(*)",
+            "Read(*)",
+            "Shell(*)",
+            "WebFetch(*)",
+            "Write(*)",
+        ):
+            self.assertIn(permission, denied)
+        self.assertNotIn("WebSearch(*)", denied)
+        self.assertEqual(config["permissions"]["allow"], ["WebSearch(*)"])
 
-    def test_cursor_local_mcp_requires_explicit_approval(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="autoreview-cursor-test.") as tmpdir:
-            repo = Path(tmpdir)
-            (repo / ".cursor").mkdir()
-            (repo / ".cursor" / "mcp.json").write_text("{}\n")
-            args = argparse.Namespace(
-                thinking=None,
-                tools=True,
-                web_search=True,
-                cursor_allow_workspace_instructions=True,
-                cursor_bin="cursor-agent",
-                model="auto",
-                stream_engine_output=False,
-            )
-            with self.assertRaises(SystemExit) as exc_info:
-                AUTOREVIEW.run_cursor(args, repo, "prompt")
-            self.assertIn("cursor engine is unavailable", str(exc_info.exception))
+    def test_cursor_review_config_can_disable_web_search(self) -> None:
+        config = AUTOREVIEW.cursor_review_config(False)
+        self.assertIn("WebSearch(*)", config["permissions"]["deny"])
 
-    def test_cursor_local_hooks_are_always_refused(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="autoreview-cursor-test.") as tmpdir:
-            repo = Path(tmpdir)
-            (repo / ".cursor").mkdir()
-            (repo / ".cursor" / "hooks.json").write_text("{}\n")
-            args = argparse.Namespace(
-                thinking=None,
-                tools=True,
-                web_search=True,
-                cursor_allow_workspace_instructions=True,
-                cursor_bin="cursor-agent",
-                model="auto",
-                stream_engine_output=False,
+    def test_cursor_current_cli_contract_is_supported(self) -> None:
+        args = argparse.Namespace(model="grok-4.5")
+        with mock.patch.object(
+            AUTOREVIEW,
+            "cursor_help_text",
+            return_value="--print\n--output-format\n--model\n",
+        ):
+            AUTOREVIEW.ensure_cursor_supported(
+                args,
+                Path("."),
+                "cursor-agent",
+                {},
             )
-            with self.assertRaises(SystemExit) as exc_info:
-                AUTOREVIEW.run_cursor(args, repo, "prompt")
-            self.assertIn("cursor engine is unavailable", str(exc_info.exception))
 
-    def test_cursor_local_permissions_are_always_refused(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="autoreview-cursor-test.") as tmpdir:
-            repo = Path(tmpdir)
-            (repo / ".cursor").mkdir()
-            (repo / ".cursor" / "cli.json").write_text("{}\n")
-            args = argparse.Namespace(
-                thinking=None,
-                tools=True,
-                web_search=True,
-                cursor_allow_workspace_instructions=True,
-                cursor_bin="cursor-agent",
-                model="auto",
-                stream_engine_output=False,
+    def test_cursor_command_uses_current_flags_without_force(self) -> None:
+        args = argparse.Namespace(
+            model="grok-4.5",
+            stream_engine_output=False,
+        )
+        with mock.patch.object(
+            AUTOREVIEW,
+            "cursor_help_text",
+            return_value=(
+                "--print\n--output-format\n--model\n--mode\n"
+            ),
+        ):
+            command = AUTOREVIEW.build_cursor_cmd(
+                args,
+                Path("."),
+                "cursor-agent",
+                {},
             )
-            with self.assertRaises(SystemExit) as exc_info:
-                AUTOREVIEW.run_cursor(args, repo, "prompt")
-            self.assertIn("cursor engine is unavailable", str(exc_info.exception))
+        self.assertIn("--mode=ask", command)
+        self.assertNotIn("--disable-project-configs", command)
+        self.assertNotIn("--force", command)
+        self.assertNotIn("--sandbox", command)
+        self.assertEqual(command[-2:], ["--model", "grok-4.5"])
 
-    def test_cursor_is_disabled_without_repo_only_read_sandbox(self) -> None:
+    def test_cursor_runs_from_empty_workspace_with_isolated_config(self) -> None:
         with tempfile.TemporaryDirectory(prefix="autoreview-cursor-test.") as tmpdir:
             root = Path(tmpdir)
             repo = root / "repo"
             repo.mkdir()
             cursor_bin = root / "cursor-agent"
+            record_path = root / "record.json"
             AUTOREVIEW.write_executable(cursor_bin, AUTOREVIEW.fake_cursor_script())
             args = argparse.Namespace(
                 thinking=None,
                 tools=True,
-                web_search=True,
+                web_search=False,
                 cursor_allow_workspace_instructions=True,
                 cursor_bin=str(cursor_bin),
-                model=None,
+                model="grok-4.5",
                 stream_engine_output=False,
             )
-            with mock.patch.object(AUTOREVIEW, "cursor_global_hook_paths", return_value=[]):
-                with self.assertRaisesRegex(SystemExit, "Cursor read permissions"):
-                    AUTOREVIEW.run_cursor(args, repo, "prompt")
+            with mock.patch.dict(
+                os.environ,
+                {"AUTOREVIEW_FAKE_RECORD": str(record_path)},
+            ):
+                output = AUTOREVIEW.run_cursor(args, repo, "prompt")
+            record = json.loads(record_path.read_text())
+            self.assertIn("fake-session", output)
+            self.assertNotEqual(Path(record["cwd"]).resolve(), repo.resolve())
+            self.assertNotIn(str(repo), record["argv"])
+            self.assertEqual(record["stdin"], "prompt")
+            config = json.loads(record["cursor_config"])
+            self.assertIn("Read(*)", config["permissions"]["deny"])
+            self.assertIn("WebSearch(*)", config["permissions"]["deny"])
 
     def test_cursor_engine_fails_closed_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory(prefix="autoreview-cursor-e2e.") as tmpdir:
@@ -737,9 +880,11 @@ class AutoreviewCompatibilityTests(unittest.TestCase):
                 check=False,
             )
 
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Cursor read permissions", result.stderr)
-            self.assertFalse(record_path.exists())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(record_path.exists())
+            record = json.loads(record_path.read_text())
+            self.assertNotEqual(Path(record["cwd"]).resolve(), repo.resolve())
+            self.assertNotIn(str(repo), record["argv"])
 
 
 if __name__ == "__main__":

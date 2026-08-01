@@ -19,7 +19,7 @@ An output fails if it:
 |---|---:|---|
 | Factual integrity | 0-3 | Preserves each fact and unknown |
 | Terminology | 0-3 | Uses exact identifiers and approved glossary terms |
-| Instruction quality | 0-3 | Orders conditions and actions correctly |
+| Instruction quality | 0-3 | Orders conditions and actions, preserves sentence parts, and distinguishes simultaneous actions |
 | Clarity | 0-3 | Uses direct sentences and useful structure |
 | Mechanical conformance | 0-2 | Meets the configured deterministic rules |
 | Audience fit | 0-2 | Serves a technical reader and selects the correct mode |

@@ -37,6 +37,17 @@
 - State what failed, the known cause, and the supported recovery action.
 - Keep an unknown cause unknown.
 
+## Prompts, tools, and agent messages
+
+- State the actor, action, object, condition, and expected result when they
+  affect behavior.
+- For a tool, define its inputs, outputs, state changes, errors, and stopping
+  condition.
+- For an agent message, separate observed results from inferred status.
+- Preserve machine-readable values and required project terms exactly.
+- Do not refer to private reasoning or context that the receiving agent cannot
+  access.
+
 ## PRs, issues, and release notes
 
 - State the changed behavior and its boundary.
@@ -49,3 +60,7 @@
 - Add prose only when the task or project convention requires it.
 - Explain a contract, intent, invariant, or non-obvious constraint.
 - Do not narrate visible code.
+- Run the linter on a supported source file or source directory. It extracts
+  comments and docstrings before it applies prose rules.
+- Do not pass a complete source file through a plain-text prose path.
+- Keep code identifiers, commands, directives, and structured examples exact.

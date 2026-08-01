@@ -1089,8 +1089,11 @@ class AutoreviewHardeningTests(unittest.TestCase):
     def test_powershell_harness_exposes_runnable_engines_only(self) -> None:
         harness = SCRIPT.with_name("test-review-harness.ps1").read_text(encoding="utf-8")
 
-        self.assertIn("[ValidateSet('codex', 'claude', 'pi')]", harness)
-        for disabled_engine in ("droid", "copilot", "opencode", "cursor"):
+        self.assertIn(
+            "[ValidateSet('codex', 'claude', 'pi', 'opencode', 'cursor')]",
+            harness,
+        )
+        for disabled_engine in ("droid", "copilot"):
             self.assertNotIn(f"'{disabled_engine}'", harness)
 
     def test_local_bundle_omits_sensitive_untracked_file_without_blocking(self) -> None:
@@ -5189,47 +5192,37 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "",
                 )
 
-    def test_cursor_refuses_global_mcp_config(self) -> None:
+    def test_cursor_detects_global_mcp_config(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             repo = init_repo(root)
             global_mcp = root / ".cursor" / "mcp.json"
             global_mcp.parent.mkdir()
             global_mcp.write_text("{}\n", encoding="utf-8")
-            args = argparse.Namespace(
-                thinking=None,
-                tools=True,
-                web_search=True,
-                cursor_allow_workspace_instructions=True,
-            )
-
             with mock.patch.object(Path, "home", return_value=root), mock.patch.dict(
                 os.environ,
                 {"HOME": str(root), "USERPROFILE": str(root)},
             ):
-                with self.assertRaisesRegex(SystemExit, "cursor engine is unavailable"):
-                    self.helper["run_cursor"](args, repo, "prompt")
+                self.assertEqual(
+                    self.helper["cursor_global_mcp_paths"](),
+                    [global_mcp],
+                )
 
-    def test_cursor_refuses_user_level_hooks(self) -> None:
+    def test_cursor_detects_user_level_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             repo = init_repo(root)
             settings = root / ".claude" / "settings.json"
             settings.parent.mkdir()
             settings.write_text('{"hooks":{"PreToolUse":[{"command":"unsafe"}]}}\n', encoding="utf-8")
-            args = argparse.Namespace(
-                thinking=None,
-                tools=True,
-                web_search=True,
-                cursor_allow_workspace_instructions=True,
-            )
-
             with mock.patch.object(Path, "home", return_value=root), mock.patch.dict(
                 os.environ,
                 {"HOME": str(root), "USERPROFILE": str(root)},
             ):
-                with self.assertRaisesRegex(SystemExit, "cursor engine is unavailable"):
-                    self.helper["run_cursor"](args, repo, "prompt")
+                self.assertEqual(
+                    self.helper["cursor_global_hook_paths"](),
+                    [settings],
+                )
 
             settings.write_text('{"permissions":{"allow":["Read(**)"]}}\n', encoding="utf-8")
             with mock.patch.object(Path, "home", return_value=root), mock.patch.dict(

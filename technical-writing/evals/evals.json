@@ -217,6 +217,136 @@
         "The skill yields because the task is not technical writing.",
         "The output follows the requested fictional form."
       ]
+    },
+    {
+      "id": "multi-word-noun",
+      "category": "structure",
+      "smoke": false,
+      "prompt": "Rewrite this phrase without losing any concept: request retry policy configuration validation. The project has not approved it as a technical noun.",
+      "expected_output": "A clear construction that divides the five-word noun group into groups of no more than three words.",
+      "protected_literals": ["request", "retry", "policy", "configuration", "validation"],
+      "forbidden_literals": ["request retry policy configuration validation"],
+      "assertions": [
+        "The response preserves all five concepts.",
+        "The response does not retain the ambiguous five-word noun group."
+      ]
+    },
+    {
+      "id": "complex-tense",
+      "category": "structure",
+      "smoke": false,
+      "prompt": "Rewrite this sentence in a simple tense without changing the event: We have received 14 events.",
+      "expected_output": "We received 14 events.",
+      "protected_literals": ["14 events"],
+      "forbidden_literals": ["have received"],
+      "assertions": [
+        "The response uses simple past tense.",
+        "The response preserves the event count."
+      ]
+    },
+    {
+      "id": "simultaneous-actions",
+      "category": "procedure",
+      "smoke": false,
+      "prompt": "Write one instruction. The user must press and hold the reset button. Pressing and holding occur at the same time. Do not convert them into sequential steps.",
+      "expected_output": "One instruction that keeps the simultaneous actions together.",
+      "protected_literals": ["reset button"],
+      "forbidden_literals": ["then hold", "after you press"],
+      "assertions": [
+        "The instruction keeps pressing and holding in one sentence.",
+        "The response does not invent an action sequence."
+      ]
+    },
+    {
+      "id": "explicit-sentence-parts",
+      "category": "structure",
+      "smoke": false,
+      "prompt": "Rewrite this warning so the affected files are explicit: Files not backed up will be lost. The intended meaning is that files that the user does not back up will be lost.",
+      "expected_output": "A warning with an explicit actor and backup condition.",
+      "protected_literals": ["files", "back up", "lost"],
+      "forbidden_literals": ["Files not backed up will be lost"],
+      "assertions": [
+        "The response states who does not back up the files.",
+        "The response preserves the loss condition."
+      ]
+    },
+    {
+      "id": "agent-tool-description",
+      "category": "developer-communication",
+      "smoke": false,
+      "prompt": "Write a tool description from these facts only. The input is a deployment ID. The tool reads deployment status and changes no state. It returns the observed state and timestamp. A timeout means the state is unknown.",
+      "expected_output": "A machine-readable description that states the input, output, lack of state changes, and timeout meaning.",
+      "protected_literals": ["deployment ID", "timestamp", "unknown"],
+      "forbidden_literals": ["retries", "failed deployment", "updates the deployment"],
+      "assertions": [
+        "The description separates input, output, and side effects.",
+        "The description reports a timeout as unknown state."
+      ]
+    },
+    {
+      "id": "formulaic-direct-rewrite",
+      "category": "formulaic-style",
+      "smoke": false,
+      "prompt": "Rewrite this release note from the supplied facts only: The migration marks a significant step forward. It reduces the median startup time from 420 ms to 310 ms.",
+      "expected_output": "A direct release note that states the measured change without stock significance framing.",
+      "protected_literals": ["420 ms", "310 ms"],
+      "forbidden_literals": ["significant step forward", "pivotal", "transformative"],
+      "assertions": [
+        "The response preserves both measurements.",
+        "The response replaces the stock phrase with the measured result."
+      ]
+    },
+    {
+      "id": "assistant-scaffold-boundary",
+      "category": "formulaic-style",
+      "smoke": false,
+      "prompt": "Answer with the result only. The parser accepted 12 files and rejected 2 files.",
+      "expected_output": "A direct result without an assistant preamble or closing offer.",
+      "protected_literals": ["12", "2"],
+      "forbidden_literals": ["certainly", "here is", "hope this helps", "let me know"],
+      "assertions": [
+        "The response starts with the observed result.",
+        "The response ends after the useful result."
+      ]
+    },
+    {
+      "id": "necessary-technical-contrast",
+      "category": "formulaic-style",
+      "smoke": false,
+      "prompt": "Preserve this required security distinction: Hashing is not encryption. Hashing is one-way. Encryption is reversible with the key.",
+      "expected_output": "A precise explanation that keeps the supplied distinction despite the rhetorical-pattern warning.",
+      "protected_literals": ["Hashing", "encryption", "one-way", "reversible", "key"],
+      "forbidden_literals": ["merely", "in disguise", "deeper understanding"],
+      "assertions": [
+        "The response preserves the required negative distinction.",
+        "The response does not weaken the security meaning to satisfy a style warning."
+      ]
+    },
+    {
+      "id": "precise-contextual-term",
+      "category": "formulaic-style",
+      "smoke": false,
+      "prompt": "Write one CSS note. The exact declaration is `@media (orientation: landscape)`. It applies when viewport width exceeds viewport height.",
+      "expected_output": "A direct CSS note that preserves the exact declaration and its condition.",
+      "protected_literals": ["@media (orientation: landscape)", "viewport width", "viewport height"],
+      "forbidden_literals": ["digital landscape", "ever-evolving", "journey"],
+      "assertions": [
+        "The response preserves the technical use of landscape.",
+        "The response does not replace a precise contextual term."
+      ]
+    },
+    {
+      "id": "restricted-vocabulary-rewrite",
+      "category": "formulaic-style",
+      "smoke": false,
+      "prompt": "Rewrite this sentence from the supplied facts only: The guide showcases an intricate retry sequence with three attempts.",
+      "expected_output": "A direct sentence that states what the guide shows and preserves the retry count.",
+      "protected_literals": ["three attempts"],
+      "forbidden_literals": ["showcase", "showcases", "intricate"],
+      "assertions": [
+        "The response preserves the retry count.",
+        "The response replaces each restricted word with precise prose."
+      ]
     }
   ]
 }

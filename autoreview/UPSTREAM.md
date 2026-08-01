@@ -1,6 +1,6 @@
 # Upstream
 
-This skill is derived from:
+AgentStation derives this skill from:
 
 - Repository: https://github.com/openclaw/agent-skills
 - Path: `skills/autoreview`

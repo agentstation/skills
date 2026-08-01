@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Lint technical prose and maintain a project glossary.
 
-The surface-form checks are adapted from woosal1337/blog's
+We adapted the surface-form checks from woosal1337/blog's
 videos/ep01-the-cure-for-ai-slop/ste-lint.py (MIT), reviewed at commit
 1de95f861304d71f028f7cc6ef3f171bb2c59f05. This implementation adds
 configuration, diagnostics, glossary enforcement, and project term discovery.
@@ -11,12 +11,15 @@ It does not certify ASD-STE100 conformance.
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import glob
+import io
 import json
 import os
 import re
 import sys
+import tokenize
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +27,7 @@ from typing import Any, Iterable
 
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.11 is required.
+except ModuleNotFoundError:  # pragma: no cover - Python 3.11 requirement.
     tomllib = None  # type: ignore[assignment]
 
 
@@ -33,12 +36,17 @@ RULE_IDS = (
     "semicolon",
     "contraction",
     "passive_voice",
+    "complex_verb",
     "ing_main_verb",
     "nominalization",
     "phrasal_verb",
     "banned_word",
     "marketing_adjective",
     "modal_hedge",
+    "formulaic_phrase",
+    "negative_parallelism",
+    "assistant_scaffold",
+    "restricted_vocabulary",
     "long_paragraph",
     "em_dash",
     "glossary_term",
@@ -152,6 +160,80 @@ MODAL_HEDGE = (
     "as mentioned",
     "as noted above",
 )
+FORMULAIC_PHRASES = (
+    "plays a pivotal role",
+    "plays a crucial role",
+    "underscores the importance",
+    "highlights the need",
+    "emphasizes the importance",
+    "delve into",
+    "delve deeper",
+    "navigate the complexities",
+    "in the realm of",
+    "through the lens of",
+    "rich tapestry",
+    "serves as a testament",
+    "stands as a reminder",
+    "shed light on",
+    "pave the way",
+    "far-reaching implications",
+    "profound implications",
+    "transformative power",
+    "a pivotal moment",
+    "a significant milestone",
+    "valuable insights",
+    "deeper understanding",
+    "nuanced understanding",
+    "mark a turning point",
+    "a significant step forward",
+    "leave a lasting mark",
+    "laid the groundwork",
+    "the path ahead",
+    "at its core",
+    "when it comes to",
+    "from a broader perspective",
+    "to put it simply",
+    "in today's fast-paced world",
+    "in an ever-evolving landscape",
+    "at the end of the day",
+    "a key takeaway is",
+)
+ASSISTANT_SCAFFOLDS = (
+    "certainly, here is",
+    "certainly! here is",
+    "sure, here is",
+    "sure! here is",
+    "i would be happy to",
+    "i'd be happy to",
+    "i’d be happy to",
+    "here is what you need to know",
+    "let me know if you want",
+    "if you want, i can",
+    "feel free to ask",
+    "hope this helps",
+)
+
+# Each match is a controlled-writing finding. Terms with common technical
+# meanings belong in precise phrase rules, human review, or project config.
+RESTRICTED_VOCABULARY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("boast", re.compile(r"\bboast(?:s|ed|ing)?\b", re.IGNORECASE)),
+    ("delve", re.compile(r"\bdelv(?:e|es|ed|ing)\b", re.IGNORECASE)),
+    ("garner", re.compile(r"\bgarner(?:s|ed|ing)?\b", re.IGNORECASE)),
+    ("groundbreaking", re.compile(r"\bgroundbreaking\b", re.IGNORECASE)),
+    (
+        "intricate",
+        re.compile(r"\b(?:intricate|intricacy|intricacies)\b", re.IGNORECASE),
+    ),
+    ("meticulous", re.compile(r"\bmeticulous(?:ly)?\b", re.IGNORECASE)),
+    ("multifaceted", re.compile(r"\bmultifaceted\b", re.IGNORECASE)),
+    ("paramount", re.compile(r"\bparamount\b", re.IGNORECASE)),
+    ("profound", re.compile(r"\bprofound(?:ly)?\b", re.IGNORECASE)),
+    ("showcase", re.compile(r"\bshowcas(?:e|es|ed|ing)\b", re.IGNORECASE)),
+    ("surpass", re.compile(r"\bsurpass(?:es|ed|ing)?\b", re.IGNORECASE)),
+    ("tapestry", re.compile(r"\btapestr(?:y|ies)\b", re.IGNORECASE)),
+    ("transformative", re.compile(r"\btransformative\b", re.IGNORECASE)),
+    ("vibrant", re.compile(r"\bvibrant(?:ly)?\b", re.IGNORECASE)),
+)
 CONTRACTIONS = (
     "ain't",
     "aren't",
@@ -259,12 +341,17 @@ BUILTINS: dict[str, Any] = {
         "semicolon": "warning",
         "contraction": "warning",
         "passive_voice": "warning",
+        "complex_verb": "warning",
         "ing_main_verb": "warning",
         "nominalization": "warning",
         "phrasal_verb": "warning",
         "banned_word": "warning",
         "marketing_adjective": "warning",
         "modal_hedge": "warning",
+        "formulaic_phrase": "warning",
+        "negative_parallelism": "warning",
+        "assistant_scaffold": "warning",
+        "restricted_vocabulary": "warning",
         "long_paragraph": "warning",
         "em_dash": "warning",
         "glossary_term": "error",
@@ -272,6 +359,10 @@ BUILTINS: dict[str, Any] = {
     "terms": {
         "additional_banned": [],
         "allowed": [],
+    },
+    "restricted_vocabulary": {
+        "additional": [],
+        "exceptions": [],
     },
 }
 
@@ -308,6 +399,38 @@ TEXT_SUFFIXES = {
 }
 PROSE_SUFFIXES = {".md", ".mdx", ".rst", ".txt"}
 PROSE_NAMES = {"CHANGELOG", "CONTRIBUTING", "LICENSE", "README"}
+PYTHON_SOURCE_SUFFIXES = {".py"}
+C_LIKE_SOURCE_SUFFIXES = {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".css",
+    ".go",
+    ".h",
+    ".hpp",
+    ".java",
+    ".js",
+    ".jsx",
+    ".jsonc",
+    ".kt",
+    ".rs",
+    ".scss",
+    ".swift",
+    ".ts",
+    ".tsx",
+}
+HASH_LINE_SOURCE_SUFFIXES = {".rb", ".sh"}
+HASH_INLINE_SOURCE_SUFFIXES = {".toml", ".yaml", ".yml"}
+HTML_COMMENT_SOURCE_SUFFIXES = {".html"}
+PHP_SOURCE_SUFFIXES = {".php"}
+SOURCE_SUFFIXES = (
+    PYTHON_SOURCE_SUFFIXES
+    | C_LIKE_SOURCE_SUFFIXES
+    | HASH_LINE_SOURCE_SUFFIXES
+    | HASH_INLINE_SOURCE_SUFFIXES
+    | HTML_COMMENT_SOURCE_SUFFIXES
+    | PHP_SOURCE_SUFFIXES
+)
 
 
 class CliError(Exception):
@@ -479,6 +602,18 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
             isinstance(item, str) and item for item in value
         ):
             raise CliError(f"terms.{key} must be an array of non-empty strings")
+
+    restricted_vocabulary = result.get("restricted_vocabulary")
+    if not isinstance(restricted_vocabulary, dict):
+        raise CliError("[restricted_vocabulary] must be a table")
+    for key in ("additional", "exceptions"):
+        value = restricted_vocabulary.get(key)
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item for item in value
+        ):
+            raise CliError(
+                f"restricted_vocabulary.{key} must be an array of non-empty strings"
+            )
     return result
 
 
@@ -528,6 +663,310 @@ def mask_range(chars: list[str], start: int, end: int) -> None:
             chars[index] = " "
 
 
+def blank_text(text: str) -> list[str]:
+    return [character if character in "\r\n" else " " for character in text]
+
+
+def reveal_range(chars: list[str], text: str, start: int, end: int) -> None:
+    chars[start:end] = text[start:end]
+
+
+COMMENT_DIRECTIVE = re.compile(
+    r"^\s*(?:"
+    r"#!|coding[:=]|noqa\b|nosec\b|type:\s|pyright:|mypy:|pylint:|ruff:|"
+    r"fmt:|shellcheck\b|eslint(?:-disable)?\b|prettier-ignore\b|"
+    r"istanbul\s+ignore\b|c8\s+ignore\b|go:|nolint\b|region\b|endregion\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def line_offsets(text: str) -> list[int]:
+    offsets = [0]
+    offsets.extend(match.end() for match in re.finditer(r"\n", text))
+    return offsets
+
+
+def position_offset(offsets: list[int], position: tuple[int, int]) -> int:
+    line, column = position
+    return offsets[line - 1] + column
+
+
+def python_docstring_positions(text: str) -> set[tuple[int, int]]:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()
+    positions: set[tuple[int, int]] = set()
+    nodes = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    for node in ast.walk(tree):
+        if not isinstance(node, nodes) or not node.body:
+            continue
+        first = node.body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            positions.add((first.value.lineno, first.value.col_offset))
+    return positions
+
+
+def python_string_body(token_text: str) -> tuple[int, int] | None:
+    match = re.match(r"(?is)^[rubf]*(\"\"\"|'''|\"|')", token_text)
+    if not match:
+        return None
+    delimiter = match.group(1)
+    if not token_text.endswith(delimiter):
+        return None
+    return match.end(), len(token_text) - len(delimiter)
+
+
+def extract_python_prose(text: str) -> str:
+    chars = blank_text(text)
+    offsets = line_offsets(text)
+    docstrings = python_docstring_positions(text)
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(text).readline)
+        for token in tokens:
+            start = position_offset(offsets, token.start)
+            end = position_offset(offsets, token.end)
+            if token.type == tokenize.COMMENT:
+                body = token.string[1:]
+                if COMMENT_DIRECTIVE.match(body):
+                    continue
+                body_start = start + 1
+                while body_start < end and text[body_start] in "#! ":
+                    body_start += 1
+                reveal_range(chars, text, body_start, end)
+            elif token.type == tokenize.STRING and token.start in docstrings:
+                body = python_string_body(token.string)
+                if body is None:
+                    continue
+                relative_start, relative_end = body
+                reveal_range(
+                    chars,
+                    text,
+                    start + relative_start,
+                    start + relative_end,
+                )
+    except (IndentationError, tokenize.TokenError):
+        pass
+    return "".join(chars)
+
+
+def clean_block_comment_decoration(
+    chars: list[str], text: str, start: int, end: int
+) -> None:
+    for match in re.finditer(r"(?m)^[ \t]*\*+[ \t]?", text[start:end]):
+        marker_start = start + match.start()
+        marker_end = start + match.end()
+        mask_range(chars, marker_start, marker_end)
+
+
+def extract_c_like_comments(text: str, *, rust: bool = False) -> str:
+    chars = blank_text(text)
+    index = 0
+    length = len(text)
+    quote: str | None = None
+    while index < length:
+        character = text[index]
+        if quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if rust and character == "'":
+            lifetime = re.match(r"'[A-Za-z_][A-Za-z0-9_]*", text[index:])
+            if lifetime is not None:
+                lifetime_end = index + lifetime.end()
+                if lifetime_end >= length or text[lifetime_end] != "'":
+                    index = lifetime_end
+                    continue
+        if character in {'"', "'", "`"}:
+            quote = character
+            index += 1
+            continue
+        if text.startswith("//", index) and (index == 0 or text[index - 1] != "\\"):
+            end = text.find("\n", index)
+            if end < 0:
+                end = length
+            body_start = index + 2
+            while body_start < end and text[body_start] in "/! ":
+                body_start += 1
+            body = text[body_start:end]
+            if not COMMENT_DIRECTIVE.match(body):
+                reveal_range(chars, text, body_start, end)
+            index = end
+            continue
+        if text.startswith("/*", index):
+            cursor = index + 2
+            depth = 1
+            closing = -1
+            while cursor < length and depth:
+                if text.startswith("/*", cursor):
+                    depth += 1
+                    cursor += 2
+                    continue
+                if text.startswith("*/", cursor):
+                    depth -= 1
+                    if depth == 0:
+                        closing = cursor
+                        break
+                    cursor += 2
+                    continue
+                cursor += 1
+            end = length if closing < 0 else closing
+            body_start = index + 2
+            while body_start < end and text[body_start] in "*! ":
+                body_start += 1
+            body = text[body_start:end]
+            if not COMMENT_DIRECTIVE.match(body):
+                reveal_range(chars, text, body_start, end)
+                clean_block_comment_decoration(chars, text, body_start, end)
+            index = length if closing < 0 else closing + 2
+            continue
+        index += 1
+    return "".join(chars)
+
+
+def extract_hash_comments(text: str, *, inline: bool) -> str:
+    chars = blank_text(text)
+    for match in re.finditer(r".*(?:\n|\Z)", text):
+        line = match.group(0)
+        if not line:
+            continue
+        comment_index = -1
+        quote: str | None = None
+        index = 0
+        while index < len(line):
+            character = line[index]
+            if character == "\n":
+                break
+            if quote is not None:
+                if character == "\\":
+                    index += 2
+                    continue
+                if character == quote:
+                    quote = None
+                index += 1
+                continue
+            if character in {'"', "'"}:
+                quote = character
+                index += 1
+                continue
+            if character == "#" and (inline or not line[:index].strip()):
+                comment_index = index
+                break
+            index += 1
+        if comment_index < 0:
+            continue
+        end = match.end() - (1 if line.endswith("\n") else 0)
+        body_start = match.start() + comment_index + 1
+        while body_start < end and text[body_start] in "#! ":
+            body_start += 1
+        body = text[body_start:end]
+        if not COMMENT_DIRECTIVE.match(body):
+            reveal_range(chars, text, body_start, end)
+    return "".join(chars)
+
+
+def html_tag_end(text: str, start: int) -> int:
+    quote: str | None = None
+    index = start + 1
+    while index < len(text):
+        character = text[index]
+        if quote is not None:
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {'"', "'"}:
+            quote = character
+        elif character == ">":
+            return index + 1
+        index += 1
+    return len(text)
+
+
+def extract_html_prose(text: str) -> str:
+    chars = blank_text(text)
+    protected_elements = {
+        "blockquote",
+        "code",
+        "kbd",
+        "pre",
+        "q",
+        "samp",
+        "script",
+        "style",
+        "table",
+    }
+    index = 0
+    while index < len(text):
+        if text.startswith("<!--", index):
+            closing = text.find("-->", index + 4)
+            end = len(text) if closing < 0 else closing
+            body_start = index + 4
+            body = text[body_start:end]
+            if not COMMENT_DIRECTIVE.match(body):
+                reveal_range(chars, text, body_start, end)
+            index = len(text) if closing < 0 else closing + 3
+            continue
+        if text[index] == "<":
+            tag_end = html_tag_end(text, index)
+            tag = re.match(r"<\s*([A-Za-z][A-Za-z0-9:-]*)\b", text[index:tag_end])
+            if tag and tag.group(1).casefold() in protected_elements:
+                name = re.escape(tag.group(1))
+                closing = re.search(rf"</\s*{name}\s*>", text[tag_end:], re.IGNORECASE)
+                index = len(text) if closing is None else tag_end + closing.end()
+                continue
+            index = tag_end
+            continue
+        next_tag = text.find("<", index)
+        end = len(text) if next_tag < 0 else next_tag
+        reveal_range(chars, text, index, end)
+        index = end
+    return "".join(chars)
+
+
+def merge_extracted_prose(text: str, *documents: str) -> str:
+    chars = blank_text(text)
+    for index, character in enumerate(text):
+        if character in "\r\n" or any(document[index] != " " for document in documents):
+            chars[index] = character
+    return "".join(chars)
+
+
+def source_prose(path: Path, text: str) -> str:
+    suffix = path.suffix.lower()
+    if suffix in PYTHON_SOURCE_SUFFIXES or (
+        not suffix and text.startswith("#!") and "python" in text.splitlines()[0]
+    ):
+        return extract_python_prose(text)
+    if suffix in C_LIKE_SOURCE_SUFFIXES:
+        return extract_c_like_comments(text, rust=suffix == ".rs")
+    if suffix in PHP_SOURCE_SUFFIXES:
+        return merge_extracted_prose(
+            text,
+            extract_c_like_comments(text),
+            extract_hash_comments(text, inline=True),
+        )
+    if suffix in HASH_LINE_SOURCE_SUFFIXES:
+        return extract_hash_comments(text, inline=False)
+    if suffix in HASH_INLINE_SOURCE_SUFFIXES:
+        return extract_hash_comments(text, inline=True)
+    if suffix in HTML_COMMENT_SOURCE_SUFFIXES:
+        return extract_html_prose(text)
+    raise CliError(
+        f"no comment-aware prose parser for source file: {path}; "
+        "use a supported source type or pass extracted prose on stdin"
+    )
+
+
 def strip_code(text: str) -> str:
     """Replace fenced and inline code with spaces while preserving offsets."""
     chars = list(text)
@@ -543,6 +982,50 @@ def strip_code(text: str) -> str:
     inline = re.compile(r"(?<!`)`+[^`\n]*?`+(?!`)")
     for match in inline.finditer(masked):
         mask_range(chars, match.start(), match.end())
+    return "".join(chars)
+
+
+def strip_protected_text(text: str) -> str:
+    """Mask exact source forms while preserving offsets for diagnostics."""
+    masked = strip_code(text)
+    chars = list(masked)
+    patterns = (
+        re.compile(r"\A---[ \t]*\n.*?^---[ \t]*(?:\n|\Z)", re.MULTILINE | re.DOTALL),
+        re.compile(r"(?m)^[ \t]*>[^\n]*(?:\n|$)"),
+        re.compile(r"(?m)^[ \t]*(?:\$|%)[ \t]+[^\n]*(?:\n|$)"),
+        re.compile(r"(?m)^[ \t]*\|[^\n]*\|[ \t]*(?:\n|$)"),
+        re.compile(
+            r"(?m)^[ \t]*(?:\[?\d{4}-\d{2}-\d{2}[T ][0-9:.+-]+\]?)[^\n]*(?:\n|$)"
+        ),
+        re.compile(r'https?://[^\s<>"\']+'),
+        re.compile(r'"[^"\n]*"'),
+        re.compile(r"“[^”\n]*”"),
+        re.compile(
+            r"(?<![A-Za-z0-9_-])(?:"
+            r"--[a-z][a-z0-9-]*|"
+            r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+|"
+            r"[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|"
+            r"[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+"
+            r")(?![A-Za-z0-9_-])"
+        ),
+    )
+    for pattern in patterns:
+        current = "".join(chars)
+        for match in pattern.finditer(current):
+            mask_range(chars, match.start(), match.end())
+    return "".join(chars)
+
+
+def mask_terms(
+    text: str, protected_terms: Iterable[str], *, ignore_case: bool = False
+) -> str:
+    """Mask approved terms without hiding a larger structural pattern."""
+    chars = list(text)
+    current = text
+    for term in sorted(set(protected_terms), key=lambda item: (-len(item), item)):
+        for match in phrase_pattern(term, ignore_case=ignore_case).finditer(current):
+            mask_range(chars, match.start(), match.end())
+        current = "".join(chars)
     return "".join(chars)
 
 
@@ -804,11 +1287,11 @@ def validate_glossary(
     return rows, errors
 
 
-def glossary_prohibited_terms(
+def glossary_lint_terms(
     path: Path, require_approved_definitions: bool
-) -> list[tuple[str, str, bool]]:
+) -> tuple[list[tuple[str, str, bool]], list[str]]:
     if not path.is_file():
-        return []
+        return [], []
     rows, errors = validate_glossary(path, require_approved_definitions)
     if errors:
         raise CliError(
@@ -816,9 +1299,11 @@ def glossary_prohibited_terms(
             + "\n".join(f"- {error}" for error in errors)
         )
     prohibited: list[tuple[str, str, bool]] = []
+    approved: list[str] = []
     for row in rows:
         status = row.status.casefold()
         if status == "approved":
+            approved.append(row.term)
             prohibited.extend(
                 (
                     alias,
@@ -836,7 +1321,7 @@ def glossary_prohibited_terms(
                     False,
                 )
             )
-    return prohibited
+    return prohibited, approved
 
 
 def lint_text(
@@ -845,10 +1330,29 @@ def lint_text(
     config: Config,
     mode: str,
     prohibited_terms: list[tuple[str, str, bool]],
+    protected_terms: Iterable[str] = (),
 ) -> list[Diagnostic]:
-    masked = strip_code(text)
+    masked = strip_protected_text(text)
     rules: dict[str, str] = config.data["rules"]
     limits: dict[str, int | float] = config.data["limits"]
+    allowed = {term.casefold() for term in config.data["terms"]["allowed"]}
+    approved_masked = mask_terms(masked, protected_terms)
+    term_masked = mask_terms(
+        approved_masked,
+        config.data["terms"]["allowed"],
+        ignore_case=True,
+    )
+    rhetorical_masked = mask_terms(
+        masked,
+        config.data["terms"]["allowed"],
+        ignore_case=True,
+    )
+    restricted_settings = config.data["restricted_vocabulary"]
+    restricted_masked = mask_terms(
+        term_masked,
+        restricted_settings["exceptions"],
+        ignore_case=True,
+    )
     diagnostics: list[Diagnostic] = []
 
     def add(rule: str, offset: int, message: str) -> None:
@@ -917,6 +1421,18 @@ def lint_text(
             "use active voice when the actor is known",
         ),
         (
+            "complex_verb",
+            re.compile(
+                r"\b(?:has|have|had)\s+"
+                r"(?:\w+ed|been|begun|broken|built|chosen|done|drawn|driven|"
+                r"eaten|fallen|found|given|gone|got|gotten|grown|held|kept|"
+                r"known|made|put|read|run|seen|sent|set|shown|spoken|taken|"
+                r"thrown|written)\b",
+                re.IGNORECASE,
+            ),
+            "use a simple tense when it preserves the timing",
+        ),
+        (
             "ing_main_verb",
             re.compile(
                 r"\b(?:am|is|are|was|were|be|been|being)\s+"
@@ -940,7 +1456,7 @@ def lint_text(
     for rule, pattern, message in simple_patterns:
         if rules[rule] == "off":
             continue
-        for match in pattern.finditer(masked):
+        for match in pattern.finditer(term_masked):
             add(rule, match.start(), message)
 
     phrase_groups = (
@@ -960,16 +1476,86 @@ def lint_text(
             MODAL_HEDGE,
             "state the known fact or exact condition",
         ),
+        (
+            "formulaic_phrase",
+            FORMULAIC_PHRASES,
+            "replace the stock phrase with the specific fact or relationship",
+        ),
+        (
+            "assistant_scaffold",
+            ASSISTANT_SCAFFOLDS,
+            "remove the assistant preamble or empty closing",
+        ),
     )
-    allowed = {term.casefold() for term in config.data["terms"]["allowed"]}
+    reported_phrase_spans: list[tuple[int, int]] = []
     for rule, phrases, message in phrase_groups:
         if rules[rule] == "off":
             continue
+        phrase_text = (
+            masked
+            if rule in {"formulaic_phrase", "assistant_scaffold"}
+            else term_masked
+        )
         active_phrases = [
             phrase for phrase in phrases if phrase.casefold() not in allowed
         ]
-        for phrase, match in find_phrases(masked, active_phrases):
+        for phrase, match in find_phrases(phrase_text, active_phrases):
             add(rule, match.start(), f"{message}: {phrase!r}")
+            if rule == "formulaic_phrase":
+                reported_phrase_spans.append(match.span())
+
+    negative_parallelism_patterns = (
+        re.compile(
+            r"\bnot\s+(?:just|only)\b[^.!?\n]{1,100}?"
+            r"\bbut\s+(?:also\s+)?",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:it|this|that)\s+(?:is|was)\s+not\b[^.!?\n]{1,100}?"
+            r"(?:[,.]\s*|\.\s+)(?:it|this|that)\s+(?:is|was)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bno\s+[^,\n]{1,60},\s*no\s+[^,\n]{1,60},\s*just\s+",
+            re.IGNORECASE,
+        ),
+    )
+    if rules["negative_parallelism"] != "off":
+        seen_parallelism: set[tuple[int, int]] = set()
+        for pattern in negative_parallelism_patterns:
+            for match in pattern.finditer(rhetorical_masked):
+                if match.span() in seen_parallelism:
+                    continue
+                seen_parallelism.add(match.span())
+                add(
+                    "negative_parallelism",
+                    match.start(),
+                    "state the direct claim unless the contrast is necessary and sourced",
+                )
+
+    if rules["restricted_vocabulary"] != "off":
+        vocabulary_patterns = list(RESTRICTED_VOCABULARY_PATTERNS)
+        vocabulary_patterns.extend(
+            (term, phrase_pattern(term)) for term in restricted_settings["additional"]
+        )
+        seen_vocabulary_spans: set[tuple[int, int]] = set()
+        for _, pattern in vocabulary_patterns:
+            for match in pattern.finditer(restricted_masked):
+                span = match.span()
+                if span in seen_vocabulary_spans:
+                    continue
+                if any(
+                    phrase_start <= span[0] and span[1] <= phrase_end
+                    for phrase_start, phrase_end in reported_phrase_spans
+                ):
+                    continue
+                seen_vocabulary_spans.add(span)
+                add(
+                    "restricted_vocabulary",
+                    match.start(),
+                    "replace restricted vocabulary with a precise common term: "
+                    f"{match.group(0)!r}",
+                )
 
     for prohibited, message, case_sensitive in prohibited_terms:
         for match in phrase_pattern(
@@ -984,6 +1570,19 @@ def lint_text(
         diagnostics,
         key=lambda item: (item.path, item.line, item.column, item.rule),
     )
+
+
+def path_has_supported_prose(path: Path) -> bool:
+    return (
+        path.suffix.lower() in (PROSE_SUFFIXES | SOURCE_SUFFIXES)
+        or path.name in PROSE_NAMES
+    )
+
+
+def prepare_lint_text(path: Path, text: str) -> str:
+    if path.suffix.lower() in PROSE_SUFFIXES or path.name in PROSE_NAMES:
+        return text
+    return source_prose(path, text)
 
 
 def expand_lint_inputs(arguments: list[str]) -> list[tuple[str, str]]:
@@ -1006,11 +1605,7 @@ def expand_lint_inputs(arguments: list[str]) -> list[tuple[str, str]]:
                 expanded.extend(
                     child
                     for child in sorted(path.rglob("*"))
-                    if child.is_file()
-                    and (
-                        child.suffix.lower() in PROSE_SUFFIXES
-                        or child.name in PROSE_NAMES
-                    )
+                    if child.is_file() and path_has_supported_prose(child)
                 )
             elif path.is_file():
                 expanded.append(path)
@@ -1030,7 +1625,8 @@ def expand_lint_inputs(arguments: list[str]) -> list[tuple[str, str]]:
             continue
         seen.add(key)
         try:
-            results.append((key, path.read_text(encoding="utf-8")))
+            text = path.read_text(encoding="utf-8")
+            results.append((key, prepare_lint_text(path, text)))
         except (OSError, UnicodeDecodeError) as exc:
             raise CliError(f"cannot read input {path}: {exc}") from exc
     if not results:
@@ -1062,7 +1658,7 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
         raise CliError(f"explicit glossary does not exist: {glossary}")
     if config.data["glossary"]["required"] and not glossary.is_file():
         raise CliError(f"required glossary does not exist: {glossary}")
-    prohibited = glossary_prohibited_terms(
+    prohibited, approved_terms = glossary_lint_terms(
         glossary, config.data["glossary"]["require_approved_definitions"]
     )
     documents = expand_lint_inputs(args.paths)
@@ -1076,7 +1672,14 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
             if path != "<stdin>" and Path(path).resolve() == glossary.resolve()
             else prohibited
         )
-        diagnostics = lint_text(text, path, config, mode, document_terms)
+        diagnostics = lint_text(
+            text,
+            path,
+            config,
+            mode,
+            document_terms,
+            approved_terms,
+        )
         all_diagnostics.extend(diagnostics)
         document_words = word_count(strip_code(text))
         results.append(
@@ -1117,9 +1720,7 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
                 f"{item.severity} {item.rule}: {item.message}"
             )
         status = "FAIL" if failed else "PASS"
-        print(
-            f"{status}: {len(results)} file(s), {len(all_diagnostics)} " "diagnostic(s)"
-        )
+        print(f"{status}: {len(results)} file(s), {len(all_diagnostics)} diagnostic(s)")
     return 1 if failed else 0
 
 

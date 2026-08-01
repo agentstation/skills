@@ -126,7 +126,7 @@ max_warnings_per_100_words = 1000
             "We can't leverage a robust tool; it is being improved — reach out "
             "because this sentence contains more than eight words. "
             "It is important to note that we perform an analysis of logs. "
-            "The result was written."
+            "The result was written. We have completed the work."
         )
         result = self.run_cli("lint", "-", "--format", "json", input_text=text)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -139,6 +139,7 @@ max_warnings_per_100_words = 1000
             {
                 "banned_word",
                 "contraction",
+                "complex_verb",
                 "em_dash",
                 "ing_main_verb",
                 "long_paragraph",
@@ -151,6 +152,48 @@ max_warnings_per_100_words = 1000
                 "semicolon",
             },
         )
+
+    def test_complex_verb_reports_perfect_tenses(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            "--mode",
+            "strict",
+            input_text=("We have received the report. The agent had written the file."),
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["complex_verb", "complex_verb"],
+        )
+
+    def test_complex_verb_allows_have_as_a_simple_verb(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            "--mode",
+            "strict",
+            input_text="We have three files. The agent has a lock.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_complex_verb_allows_adjectives_after_have(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            "--mode",
+            "strict",
+            input_text="We have green status lights. The project has open issues.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
 
     def test_developer_allows_configured_warning_rate_but_strict_promotes(self) -> None:
         self.write_project_config(
@@ -300,8 +343,7 @@ long_sentence = "error"
             "--format",
             "json",
             input_text=(
-                "1. Read the file. "
-                "Verify the complete configuration before continuing."
+                "1. Read the file. Verify the complete configuration before continuing."
             ),
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
@@ -328,8 +370,7 @@ long_sentence = "error"
             "--format",
             "json",
             input_text=(
-                "1. Read the complete configuration\n"
-                "   before you run the command.\n"
+                "1. Read the complete configuration\n   before you run the command.\n"
             ),
         )
         self.assertEqual(result.returncode, 1)
@@ -344,8 +385,7 @@ long_sentence = "error"
         self.write_project_config('[terms]\nadditional_banned = ["widget"]\n')
         explicit = self.root / "override.toml"
         explicit.write_text(
-            '[rules]\nbanned_word = "error"\n'
-            '[terms]\nadditional_banned = ["gadget"]\n',
+            '[rules]\nbanned_word = "error"\n[terms]\nadditional_banned = ["gadget"]\n',
             encoding="utf-8",
         )
 
@@ -498,11 +538,146 @@ required = true
         executable.write_text(
             "robust; leverage; this is not a prose artifact\n", encoding="utf-8"
         )
+        (docs / "worker.py").write_text(
+            'VALUE = "robust; leverage; intricate"\n# The parser reads one file.\n',
+            encoding="utf-8",
+        )
         result = self.run_cli("lint", "docs", "--format", "json")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["summary"]["files"], 1)
+        self.assertEqual(payload["summary"]["files"], 2)
         self.assertEqual(payload["summary"]["diagnostics"], 0)
+
+    def test_python_lint_extracts_comments_and_docstrings_only(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        source = self.project / "worker.py"
+        source.write_text(
+            '"""This module showcases the parser."""\n'
+            'VALUE = "The vibrant tapestry delves into a realm."\n'
+            "# The intricate parser reads input.\n"
+            "def parse():\n"
+            '    """The helper is transformative."""\n'
+            '    return "showcase"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", str(source), "--format", "json")
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["restricted_vocabulary"] * 3,
+        )
+        self.assertEqual([item["line"] for item in diagnostics], [1, 3, 5])
+
+    def test_c_like_lint_extracts_line_and_block_comments_only(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        source = self.project / "worker.ts"
+        source.write_text(
+            'const value = "The vibrant tapestry.";\n'
+            "// The intricate parser reads input.\n"
+            "/**\n"
+            " * The module showcases results.\n"
+            " */\n"
+            'const url = "https://example.com/path";\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", str(source), "--format", "json")
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["restricted_vocabulary", "restricted_vocabulary"],
+        )
+        self.assertEqual([item["line"] for item in diagnostics], [2, 4])
+
+    def test_rust_lifetimes_and_php_hash_comments_use_comment_parsers(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        rust = self.project / "worker.rs"
+        rust.write_text(
+            "fn borrow<'a>(value: &'a str) -> &'a str {\n"
+            "    // The intricate helper returns the input.\n"
+            "    value\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        php = self.project / "worker.php"
+        php.write_text(
+            '<?php $value = "intricate";\n# The helper showcases the result.\n',
+            encoding="utf-8",
+        )
+        rust_result = self.run_cli("lint", str(rust), "--format", "json")
+        php_result = self.run_cli("lint", str(php), "--format", "json")
+        rust_diagnostics = json.loads(rust_result.stdout)["documents"][0]["diagnostics"]
+        php_diagnostics = json.loads(php_result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in rust_diagnostics],
+            ["restricted_vocabulary"],
+        )
+        self.assertEqual(
+            [item["rule"] for item in php_diagnostics],
+            ["restricted_vocabulary"],
+        )
+
+    def test_structured_source_lints_comments_not_values(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        source = self.project / "settings.toml"
+        source.write_text(
+            'description = "A vibrant tapestry"\n'
+            "# The intricate option controls retries.\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", str(source), "--format", "json")
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics], ["restricted_vocabulary"]
+        )
+        self.assertEqual(diagnostics[0]["line"], 2)
+
+    def test_html_lint_extracts_visible_text_and_comments(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        source = self.project / "guide.html"
+        source.write_text(
+            '<p class="intricate">The intricate guide reads input.</p>\n'
+            "<code>The vibrant tapestry</code>\n"
+            '<script>const value = "transformative";</script>\n'
+            "<!-- The note showcases the result. -->\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", str(source), "--format", "json")
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["restricted_vocabulary", "restricted_vocabulary"],
+        )
+        self.assertEqual([item["line"] for item in diagnostics], [1, 4])
+
+    def test_unsupported_source_is_not_linted_as_plain_prose(self) -> None:
+        source = self.project / "data.json"
+        source.write_text('{"description":"intricate"}\n', encoding="utf-8")
+        result = self.run_cli("lint", str(source), "--format", "json")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("no comment-aware prose parser", result.stderr)
+
+    def test_markdown_structured_data_logs_and_identifiers_are_protected(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        text = """---
+description: intricate tapestry
+---
+
+| Field | Value |
+|---|---|
+| mode | transformative |
+
+2026-07-31T12:00:00Z INFO delve into the request
+
+$ delve --intricate
+
+Read tapestry.value. The intricate prose remains.
+"""
+        result = self.run_cli("lint", "-", "--format", "json", input_text=text)
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics], ["restricted_vocabulary"]
+        )
+        self.assertIn("intricate", diagnostics[0]["message"])
 
     def test_missing_input_and_invalid_config_exit_two(self) -> None:
         missing = self.run_cli("lint", "missing.md")
@@ -850,6 +1025,246 @@ allowed = ["ensure"]
         diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
         self.assertEqual([item["rule"] for item in diagnostics], ["banned_word"])
         self.assertIn("'ensures'", diagnostics[0]["message"])
+
+    def test_formulaic_phrase_reports_stock_framing(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The change marks a significant step forward for the parser.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["formulaic_phrase"])
+        self.assertIn("specific fact", diagnostics[0]["message"])
+
+    def test_allowed_phrase_suppresses_an_exact_formulaic_exception(self) -> None:
+        self.write_project_config('[terms]\nallowed = ["a significant step forward"]\n')
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The change marks a significant step forward for the parser.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_formulaic_phrase_reports_each_occurrence_without_word_duplication(
+        self,
+    ) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="We delve into logs. We delve into traces.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["formulaic_phrase", "formulaic_phrase"],
+        )
+
+    def test_assistant_scaffold_reports_preamble_and_closing(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="Certainly, here is the result. Hope this helps.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["assistant_scaffold", "assistant_scaffold"],
+        )
+
+    def test_negative_parallelism_reports_selected_rhetorical_forms(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                "The patch is not just smaller, but also clearer. "
+                "It is not a cache. It is a lookup table. "
+                "No setup, no waiting, just results."
+            ),
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            [
+                "negative_parallelism",
+                "negative_parallelism",
+                "negative_parallelism",
+            ],
+        )
+
+    def test_negative_parallelism_allows_direct_technical_comparison(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="Use TLS rather than HTTP.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_allowed_phrase_suppresses_an_exact_rhetorical_exception(self) -> None:
+        self.write_project_config(
+            '[terms]\nallowed = ["not only smaller, but also faster"]\n'
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The build is not only smaller, but also faster.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_restricted_vocabulary_reports_each_occurrence(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                "The intricate guide showcases a vibrant design. "
+                "The guide remains intricate."
+            ),
+        )
+        contextual = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The roadmap aligns memory on a page boundary.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["restricted_vocabulary"] * 4,
+        )
+        self.assertEqual(json.loads(contextual.stdout)["summary"]["diagnostics"], 0)
+
+    def test_modes_change_restricted_vocabulary_severity(self) -> None:
+        developer = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The intricate parser reads input.",
+        )
+        strict = self.run_cli(
+            "lint",
+            "-",
+            "--mode",
+            "strict",
+            "--format",
+            "json",
+            input_text="The intricate parser reads input.",
+        )
+        developer_diagnostic = json.loads(developer.stdout)["documents"][0][
+            "diagnostics"
+        ][0]
+        strict_diagnostic = json.loads(strict.stdout)["documents"][0]["diagnostics"][0]
+        self.assertEqual(developer_diagnostic["severity"], "warning")
+        self.assertEqual(strict_diagnostic["severity"], "error")
+
+    def test_restricted_vocabulary_settings_are_layered_and_configurable(self) -> None:
+        self.write_project_config(
+            """
+[restricted_vocabulary]
+additional = ["polished arc"]
+exceptions = ["intricate"]
+"""
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The intricate guide defines a polished arc.",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["restricted_vocabulary"],
+        )
+        self.assertIn("polished arc", diagnostics[0]["message"])
+
+    def test_restricted_vocabulary_exception_is_an_exact_form(self) -> None:
+        self.write_project_config(
+            '[restricted_vocabulary]\nexceptions = ["intricate"]\n'
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The intricate guide describes several intricacies.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics], ["restricted_vocabulary"]
+        )
+        self.assertIn("intricacies", diagnostics[0]["message"])
+
+    def test_quotations_and_approved_terms_are_protected(self) -> None:
+        self.write_glossary(
+            "| robust | A project-specific parser mode. | | Approved | README.md |\n"
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                'The parser is robust. "The module plays a crucial role."\n\n'
+                "> The guide presents a vibrant tapestry that showcases a journey.\n"
+            ),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_approved_term_does_not_hide_a_larger_formulaic_phrase(self) -> None:
+        self.write_glossary(
+            "| pivotal | A project-specific release class. | | Approved | README.md |\n"
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="The module plays a pivotal role in parsing.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["formulaic_phrase"])
+
+    def test_invalid_restricted_vocabulary_config_exits_two(self) -> None:
+        config = self.root / "bad-style.toml"
+        config.write_text(
+            '[restricted_vocabulary]\nexceptions = "intricate"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--config",
+            str(config),
+            input_text="Text.",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must be an array of non-empty strings", result.stderr)
 
 
 if __name__ == "__main__":

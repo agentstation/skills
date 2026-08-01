@@ -5,7 +5,10 @@ smoke markers, protected literals, and forbidden trap claims.
 
 The suite covers developer responses, READMEs, API errors, technical web pages,
 procedures, PRs, release notes, exact content, mode selection, and glossary
-terms.
+terms. It also covers multi-word nouns, complex tenses, and simultaneous
+actions. Other cases cover explicit sentence parts, machine-consumed agent
+text, formulaic phrasing, assistant scaffolds, required contrasts, and precise
+contextual terms. The suite also covers per-occurrence restricted vocabulary.
 
 ## Cadence
 

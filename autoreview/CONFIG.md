@@ -1,12 +1,12 @@
 # Autoreview configuration
 
-Configuration is layered in this order, with later values replacing earlier
-ones:
+The helper layers configuration in this order. Later values replace earlier
+values:
 
-1. built-in defaults;
-2. `${XDG_CONFIG_HOME:-~/.config}/autoreview/config.toml`;
-3. `<repo>/.agents/autoreview/config.toml`;
-4. each explicit `--config PATH`;
+1. built-in defaults.
+2. `${XDG_CONFIG_HOME:-~/.config}/autoreview/config.toml`.
+3. `<repo>/.agents/autoreview/config.toml`.
+4. each explicit `--config PATH`.
 5. environment and CLI reviewer overrides.
 
 Set `AUTOREVIEW_CONFIG` to replace the default global path. Use `--no-config`
@@ -26,7 +26,7 @@ substantive_only = true
 Cadence values are `manual`, `pre-pr`, `item`, `task`, `phase`, and `step`.
 Manual CLI invocations always run. Other gates run only when their value equals
 the configured cadence. With `substantive_only = true`, automatic gates skip
-when no changed path is classified as source code.
+when the changed paths contain no source code.
 
 ## Profiles
 
@@ -46,8 +46,8 @@ candidates = ["sol", "opus5"]
 ```
 
 Select it with `--profile security-panel`. Exact profiles fail closed if a
-required harness is unavailable. A candidate marked
-`manual_approval_required = true` requires an explicit `--profile`; it cannot
+required harness is unavailable. A candidate with
+`manual_approval_required = true` requires an explicit `--profile`. It cannot
 become an automatic default.
 
 ## Candidates
@@ -65,34 +65,86 @@ deepswe_pass_rate = 73
 deepswe_avg_cost_usd = 6.08
 ```
 
-`engine` identifies the isolation harness: `claude` means the Claude Code CLI
-and `codex` means the Codex CLI. `model` is the model invoked through that
-harness. The candidate table name is a stable ID for the complete reviewer
-configuration, not another model field.
+`engine` identifies the review harness. Supported runnable engines are
+`claude`, `codex`, `pi`, `opencode`, and `cursor`. The helper also accepts
+`cursor-agent` as an alias. `model` identifies the model that the harness
+invokes. OpenCode expects a provider-qualified `provider/model` name. Cursor
+accepts model names from the account catalog. The candidate table name is a
+stable ID for the complete reviewer configuration, not another model field.
 
-`cost` is literal on a 0–10 scale derived from DeepSWE's measured average cost
-per task at the candidate's configured effort: 0 is free and 10 is the most
-expensive candidate. Preserve the underlying measurement in
+`cost` uses a literal 0–10 scale. The scale derives from DeepSWE's measured
+average task cost at the candidate's configured effort. Zero is free, and 10 is
+the most expensive candidate. Preserve the underlying measurement in
 `deepswe_avg_cost_usd`. Lower cost improves the automatic-selection score.
 `manual_approval_required` is a separate safety gate and does not affect the
 score. See
 [`MODEL_SELECTION.md`](MODEL_SELECTION.md) for the normalization formula and
 source data.
 
-Supported engines remain governed by the helper's isolation checks. At present,
-Codex, Claude, and a sufficiently recent Pi CLI can be automatic candidates.
-Other bundled adapters fail closed until their CLIs can prove equivalent
-isolation.
+The helper's isolation checks govern every supported engine. You can configure
+Codex, Claude, a sufficiently recent Pi CLI, OpenCode, and Cursor Agent as
+automatic candidates. The adapters give OpenCode and Cursor only the frozen
+prompt bundle. They run from empty workspaces. The adapters disable repository,
+filesystem, shell, edit, plugin, MCP, and project-instruction capabilities.
 
-Fable candidates must set `manual_approval_required = true`. Approval is granted
-only by an explicit CLI `--profile` whose selected candidates include Fable, an
-explicit CLI `--model` value naming Fable, or an inline Fable model in an
-explicit CLI `--reviewers` value. Scored profiles, config defaults, environment
-defaults, automatic gates, and unrelated command arguments cannot grant
-approval. Fable is also refused in fallback chains because fallback invocation
-is automatic. The legacy `manual_approval`, `explicit_only`, and
-`automatic = false` fields remain recognized when reading older config, but new
-config should use `manual_approval_required`.
+Inspect the installed harnesses before choosing a profile:
+
+```bash
+autoreview --list-harnesses
+```
+
+The capability table distinguishes `cli_installed`, `desktop`, and
+`automatic_eligible`. A desktop app never substitutes for the CLI command used
+by autoreview. Installers are opt-in:
+
+```bash
+autoreview --install-harness pi
+autoreview --install-harness opencode
+autoreview --install-harness cursor
+autoreview --engine cursor --model grok-4.5 --install-if-missing
+```
+
+`--install-harness` installs and verifies the requested CLI, then exits. The
+`--install-if-missing` flag permits installation only for an explicitly selected
+engine, reviewer panel, or profile. If scored selection lacks reviewer quorum,
+the flag installs the best missing isolation-safe harness. Without the flag,
+scored selection never installs software. Pi uses the current
+`@earendil-works/pi-coding-agent` package. The installer rejects the deprecated
+`@mariozechner/pi-coding-agent` package.
+
+| harness | canonical installer used |
+| --- | --- |
+| [Codex CLI](https://help.openai.com/en/articles/11096431) | `npm install -g @openai/codex` |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started) | `npm install -g @anthropic-ai/claude-code` |
+| [Pi](https://pi.dev/docs/latest) | `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` |
+| [OpenCode](https://opencode.ai/docs/) | `npm install -g opencode-ai` |
+| [Cursor Agent](https://docs.cursor.com/en/cli/installation) | Official `https://cursor.com/install` script, downloaded to a bounded temporary regular file before execution |
+
+Explicit model examples:
+
+```bash
+autoreview --engine cursor --model grok-4.5
+autoreview --engine cursor --model glm-5.2
+autoreview --engine cursor --model kimi-k3
+autoreview --engine opencode --model opencode/kimi-k3 --thinking max
+autoreview --engine opencode --model opencode/glm-5.2 --thinking max
+autoreview --engine opencode --model opencode/grok-4.5 --thinking high
+```
+
+Model names are deliberately not rewritten by autoreview. Use
+`opencode models <provider>` for OpenCode and the Cursor model catalog for
+Cursor, because provider and hosted-catalog identifiers can change.
+
+Fable candidates must set `manual_approval_required = true`. An explicit CLI
+selection grants approval only when it names Fable. Valid selections include
+`--profile`, `--model`, and an inline model in `--reviewers`. Scored profiles,
+config defaults, environment defaults, automatic gates, and unrelated arguments
+cannot grant approval. The helper also refuses Fable in fallback chains because
+fallback invocation is automatic.
+
+The helper recognizes the legacy
+`manual_approval`, `explicit_only`, and `automatic = false` fields in older
+config. New config should use `manual_approval_required`.
 
 ## Policy
 

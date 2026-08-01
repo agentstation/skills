@@ -1,6 +1,6 @@
 ---
 name: autoreview
-description: Run an isolated second-model review immediately before publishing a PR with substantive code changes, at a configured plan checkpoint, or when the user explicitly requests autoreview.
+description: Run an isolated second-model review before a substantive-code PR, at configured checkpoints, or when the user explicitly requests autoreview.
 ---
 
 # Autoreview
@@ -65,12 +65,46 @@ the current host agent. The built-in profiles are:
 ```
 
 Opus 5 high is the default Claude-side code reviewer. Fable requires manual
-approval through an explicit CLI profile, model, or reviewer request; reserve it
+approval through an explicit CLI profile, model, or reviewer request. Reserve it
 for architecture-sensitive or exceptionally complex change review. Fable is
 never selected automatically, approved by config or environment defaults, or
-used as a fallback. Built-in Claude policy caps effort at `high`; a config can
-consciously change that cap. Other supported models and harnesses can be
-registered as candidates in config.
+used as a fallback. Built-in Claude policy caps effort at `high`. A config can
+consciously change that cap.
+
+Config can register other supported models and
+harnesses as candidates.
+
+The helper also supports OpenCode and Cursor Agent when their CLIs exist:
+
+```bash
+"$AUTOREVIEW" --engine opencode --model opencode/kimi-k3 --thinking max
+"$AUTOREVIEW" --engine cursor --model grok-4.5
+"$AUTOREVIEW" --reviewers cursor:grok-4.5,opencode:opencode/glm-5.2:max
+"$AUTOREVIEW" --list-harnesses
+```
+
+OpenCode model names use its runtime `provider/model` catalog. Cursor model
+names use the Cursor account catalog, including subscription-hosted models. A
+compatible Pi CLI enables Pi as an explicit or configured candidate.
+
+Desktop applications and headless review harnesses are separate capabilities.
+For example, Cursor Desktop does not satisfy the `cursor-agent` requirement,
+and Codex Desktop does not satisfy the `codex` requirement. A missing CLI is
+never automatically eligible. Inspect or explicitly install harnesses with:
+
+```bash
+"$AUTOREVIEW" --list-harnesses
+"$AUTOREVIEW" --install-harness cursor
+"$AUTOREVIEW" --engine cursor --model grok-4.5 --install-if-missing
+```
+
+Installation is always explicit. Automatic scored selection skips missing
+harnesses. It never downloads software unless the caller passes
+`--install-if-missing`. With that opt-in, a profile lacking quorum installs the
+best missing isolation-safe harness. An unavailable harness fails
+with a machine-readable `harness_unavailable` or `profile_unavailable` marker,
+desktop-versus-CLI diagnosis, canonical installation command, and recovery
+options.
 
 Read [`MODEL_SELECTION.md`](MODEL_SELECTION.md) when changing score axes,
 candidate defaults, effort policy, or benchmark inputs.
@@ -85,8 +119,8 @@ candidate defaults, effort policy, or benchmark inputs.
 - Stop on a clean helper exit. Add another reviewer only when the selected
   profile requires one.
 
-The reviewer classifies every concrete actionable defect from P0 through P3;
-deterministic post-processing then applies the requested output threshold. The
+The reviewer classifies every concrete actionable defect from P0 through P3.
+Deterministic post-processing then applies the requested output threshold. The
 default threshold is P0. Widen it only when requested:
 
 ```bash
@@ -94,8 +128,8 @@ default threshold is P0. Widen it only when requested:
 ```
 
 Pause and report when a finding requires a new protocol, schema, storage layout,
-public API, release process, or owner boundary, or when two review-triggered
-patch cycles have not converged.
+public API, release process, or owner boundary. Also pause when two
+review-triggered patch cycles have not converged.
 
 ## Safety
 
@@ -105,6 +139,14 @@ patch cycles have not converged.
   and repository rules disabled.
 - Claude runs in safe mode with project skills, hooks, plugins, MCP servers,
   memory, filesystem, and shell access disabled.
+- OpenCode runs from an empty workspace with project instructions, Claude
+  compatibility, plugins, MCP servers, filesystem, shell, and edit tools
+  disabled.
+- Cursor Agent runs from an empty workspace with an isolated permission config.
+- It uses Ask mode when supported and denies filesystem, shell, write, fetch,
+  force-write, and MCP permissions.
+- Pi runs without repository context files, extensions, skills, sessions, or
+  tools.
 - Explicit prompt, dataset, and repository config inputs remain inside the
   reviewed repository unless the user passes a trusted config path.
 - The helper never pushes, commits, or mutates the reviewed repository.

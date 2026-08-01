@@ -16,6 +16,7 @@ REQUIRED_CATEGORIES = {
     "developer-communication",
     "exact-content",
     "factual-integrity",
+    "formulaic-style",
     "mode-selection",
     "procedure",
     "restraint",

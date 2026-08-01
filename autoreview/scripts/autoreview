@@ -16,6 +16,7 @@ import math
 import os
 import queue
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -34,7 +35,28 @@ from typing import Any, Callable, NamedTuple
 ENGINES = ("codex", "claude", "droid", "copilot", "pi", "opencode", "cursor")
 ENGINE_ALIASES = {"cursor-agent": "cursor"}
 ENGINE_CHOICES = (*ENGINES, *ENGINE_ALIASES)
-ALL_REVIEWERS = ("codex", "claude", "pi")
+ALL_REVIEWERS = ("codex", "claude", "pi", "opencode", "cursor")
+INSTALLABLE_ENGINES = ("codex", "claude", "pi", "opencode", "cursor")
+ENGINE_CLI_NAMES = {
+    "codex": "codex",
+    "claude": "claude",
+    "pi": "pi",
+    "opencode": "opencode",
+    "cursor": "cursor-agent",
+}
+NPM_HARNESS_PACKAGES = {
+    "codex": ("@openai/codex", False),
+    "claude": ("@anthropic-ai/claude-code", False),
+    "pi": ("@earendil-works/pi-coding-agent", True),
+    "opencode": ("opencode-ai", False),
+}
+HARNESS_AUTH_HINTS = {
+    "codex": "Run `codex login` if the CLI is not already authenticated.",
+    "claude": "Run `claude` and complete `/login` if the CLI is not already authenticated.",
+    "pi": "Run `pi`, then `/login`, or configure a supported provider API key.",
+    "opencode": "Run `opencode auth login` for the provider you intend to use.",
+    "cursor": "Run `cursor-agent login` to connect the CLI to your Cursor subscription.",
+}
 SAFE_GIT_CONFIG_ARGS = (
     "-c",
     "core.fsmonitor=false",
@@ -802,7 +824,11 @@ THINKING_LEVELS_BY_ENGINE = {
     "opencode": {"minimal", "low", "medium", "high", "max"},
     "cursor": set(),
 }
-SAFE_AUTOMATIC_ENGINES = {"codex", "claude", "pi"}
+# Every engine in this set runs against the frozen prompt bundle from an empty
+# workspace and must pass the hostile-config isolation self-test. Engines that
+# are merely named in ENGINES but are not here can still have parser scaffolding
+# without entering scored or exact-profile selection.
+SAFE_AUTOMATIC_ENGINES = {"codex", "claude", "pi", "opencode", "cursor"}
 REVIEW_CADENCES = ("manual", "pre-pr", "item", "task", "phase", "step")
 SUBSTANTIVE_CODE_SUFFIXES = {
     ".bash",
@@ -1405,6 +1431,7 @@ def safe_engine_env(
     engine_allowed_exact = {
         "claude": claude_allowed_exact,
         "codex": codex_allowed_exact,
+        "cursor": {"CURSOR_API_KEY"},
         "opencode": multi_provider_allowed_exact,
         "pi": pi_allowed_exact,
     }.get(engine or "", set())
@@ -1765,15 +1792,21 @@ def opencode_review_config(web_search: bool = True) -> dict[str, Any]:
         "autoupdate": False,
         "command": {},
         "instructions": [],
+        "mcp": {},
         "plugin": [],
         "permission": permission,
         "share": "disabled",
         "tools": {
             "bash": False,
             "edit": False,
+            "glob": False,
+            "grep": False,
+            "read": False,
             "skill": False,
             "task": False,
             "todowrite": False,
+            "webfetch": False,
+            "websearch": web_search,
             "write": False,
         },
     }
@@ -1781,10 +1814,14 @@ def opencode_review_config(web_search: bool = True) -> dict[str, Any]:
 
 def opencode_review_env(web_search: bool = True) -> dict[str, str]:
     env = {
-        "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
         "OPENCODE_CONFIG_CONTENT": json.dumps(opencode_review_config(web_search), separators=(",", ":")),
         "OPENCODE_DISABLE_AUTOUPDATE": "1",
         "OPENCODE_DISABLE_AUTOCOMPACT": "1",
+        "OPENCODE_DISABLE_CLAUDE_CODE": "1",
+        "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT": "1",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "1",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
+        "OPENCODE_DISABLE_LSP_DOWNLOAD": "1",
         "OPENCODE_DISABLE_MODELS_FETCH": "1",
     }
     if web_search and (enable_exa := os.environ.get("OPENCODE_ENABLE_EXA")):
@@ -10362,11 +10399,62 @@ def build_opencode_cmd(args: argparse.Namespace, repo: Path) -> list[str]:
 
 
 def run_opencode(args: argparse.Namespace, repo: Path, prompt: str) -> str:
-    raise SystemExit(
-        "opencode engine is unavailable: the current CLI contract does not prove "
-        "project-config isolation and its generic fetch tool cannot be restricted "
-        "away from private or metadata endpoints; use codex, claude, or pi"
-    )
+    opencode_bin = resolve_command(args.opencode_bin, repo)
+    with tempfile.TemporaryDirectory(
+        prefix="autoreview-opencode-workspace.",
+        dir=safe_temp_root(repo),
+    ) as workspace_dir, tempfile.TemporaryDirectory(
+        prefix="autoreview-opencode-config.",
+        dir=safe_temp_root(repo),
+    ) as config_dir:
+        review_root = Path(workspace_dir)
+        config_root = Path(config_dir)
+        cmd = build_opencode_cmd(args, review_root)
+        result = run_with_heartbeat(
+            cmd,
+            review_root,
+            input_text=prompt,
+            label="opencode",
+            stream_output=args.stream_engine_output,
+            env=safe_engine_env(
+                repo,
+                [Path(opencode_bin).parent],
+                engine="opencode",
+                extra={
+                    **opencode_review_env(args.web_search),
+                    "OPENCODE_CONFIG_DIR": str(config_root),
+                },
+            ),
+            resolve_root=repo,
+        )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"opencode engine failed ({result.returncode})\n"
+            f"{result.stderr or result.stdout}"
+        )
+    return result.stdout
+
+
+def cursor_review_config(web_search: bool = True) -> dict[str, Any]:
+    denied = [
+        "Delete(*)",
+        "Grep(*)",
+        "LS(*)",
+        "Mcp(*)",
+        "Read(*)",
+        "Shell(*)",
+        "WebFetch(*)",
+        "Write(*)",
+    ]
+    if not web_search:
+        denied.append("WebSearch(*)")
+    allowed = ["WebSearch(*)"] if web_search else []
+    return {
+        "permissions": {
+            "allow": allowed,
+            "deny": denied,
+        },
+    }
 
 
 def cursor_local_mcp_paths(repo: Path) -> list[Path]:
@@ -10488,17 +10576,13 @@ def ensure_cursor_supported(
     repo: Path,
     cursor_bin: str,
     engine_env: dict[str, str],
-) -> None:
+) -> str:
     help_text = cursor_help_text(cursor_bin, repo, engine_env)
     missing: list[str] = []
     if "--print" not in help_text and "-p" not in help_text:
         missing.append("--print/-p")
     if "--output-format" not in help_text:
         missing.append("--output-format")
-    if "--mode" not in help_text:
-        missing.append("--mode")
-    if "--sandbox" not in help_text:
-        missing.append("--sandbox")
     if args.model and "--model" not in help_text and "-m" not in help_text:
         missing.append("--model/-m")
     if missing:
@@ -10507,6 +10591,7 @@ def ensure_cursor_supported(
             + ", ".join(missing)
             + ". Current Cursor CLI help does not advertise the required option(s)."
         )
+    return help_text
 
 
 def build_cursor_cmd(
@@ -10515,27 +10600,67 @@ def build_cursor_cmd(
     cursor_bin: str,
     engine_env: dict[str, str],
 ) -> list[str]:
-    ensure_cursor_supported(args, repo, cursor_bin, engine_env)
+    help_text = ensure_cursor_supported(args, repo, cursor_bin, engine_env)
     cmd = [
         cursor_bin,
         "--print",
         "--output-format",
         "stream-json" if args.stream_engine_output else "json",
-        "--mode",
-        "ask",
-        "--sandbox",
-        "enabled",
     ]
+    if "--mode" in help_text:
+        cmd.append("--mode=ask")
     if args.model:
         cmd.extend(["--model", args.model])
     return cmd
 
 
 def run_cursor(args: argparse.Namespace, repo: Path, prompt: str) -> str:
-    raise SystemExit(
-        "cursor engine is unavailable: Cursor read permissions can target absolute host paths "
-        "and the CLI does not expose a proven repository-only filesystem sandbox"
-    )
+    cursor_bin = resolve_command(args.cursor_bin, repo)
+    with tempfile.TemporaryDirectory(
+        prefix="autoreview-cursor-workspace.",
+        dir=safe_temp_root(repo),
+    ) as workspace_dir:
+        review_root = Path(workspace_dir)
+        project_config_root = review_root / ".cursor"
+        project_config_root.mkdir()
+        (project_config_root / "cli.json").write_text(
+            json.dumps(
+                cursor_review_config(args.web_search),
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        engine_env = safe_engine_env(
+            repo,
+            [Path(cursor_bin).parent],
+            engine="cursor",
+        )
+        cmd = build_cursor_cmd(
+            args,
+            review_root,
+            cursor_bin,
+            engine_env,
+        )
+        result = run_with_heartbeat(
+            cmd,
+            review_root,
+            input_text=prompt,
+            label="cursor",
+            stream_output=args.stream_engine_output,
+            stream_display=CursorStreamDisplay()
+            if args.stream_engine_output
+            else None,
+            env=engine_env,
+            resolve_root=repo,
+        )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"cursor engine failed ({result.returncode})\n"
+            f"{result.stderr or result.stdout}"
+        )
+    print_cursor_metadata(result.stdout)
+    return result.stdout
 
 
 def run_pi(args: argparse.Namespace, repo: Path, prompt: str) -> str:
@@ -11131,7 +11256,7 @@ args = sys.argv[1:]
 env = {
     key: os.environ.get(key)
     for key in (
-        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "OPENCODE_CONFIG_DIR",
         "OPENCODE_CONFIG_CONTENT",
         "OPENCODE_DISABLE_AUTOUPDATE",
         "OPENCODE_DISABLE_AUTOCOMPACT",
@@ -11178,7 +11303,7 @@ if "--help" in args or "-h" in args:
     raise SystemExit(0)
 record = os.environ["AUTOREVIEW_FAKE_RECORD"]
 stdin = sys.stdin.read()
-cursor_config = Path(os.environ["CURSOR_CONFIG_DIR"], "cli-config.json").read_text()
+cursor_config = Path(os.getcwd(), ".cursor", "cli.json").read_text()
 Path(record).write_text(
     json.dumps(
         {
@@ -11357,29 +11482,79 @@ def self_test_engine_isolation() -> int:
 
             if record_path.exists():
                 record_path.unlink()
-            try:
-                run_opencode(args, repo, "review hostile patch")
-            except SystemExit as exc:
-                if "opencode engine is unavailable" not in str(exc):
-                    raise
-            else:
-                raise SystemExit("opencode isolation self-test failed: unsafe engine was allowed")
-            if record_path.exists():
-                raise SystemExit("opencode isolation self-test failed: disabled engine was invoked")
+            run_opencode(args, repo, "review hostile patch")
+            opencode_record = json.loads(record_path.read_text())
+            opencode_argv = opencode_record["argv"]
+            for required in ["run", "--pure", "--format", "json"]:
+                if required not in opencode_argv:
+                    raise SystemExit(
+                        f"opencode isolation self-test failed: missing {required}"
+                    )
+            opencode_cwd = Path(opencode_record["cwd"]).resolve()
+            if opencode_cwd == repo.resolve() or is_within(
+                opencode_cwd,
+                repo.resolve(),
+            ):
+                raise SystemExit(
+                    "opencode isolation self-test failed: review ran inside hostile repo"
+                )
+            if str(repo) in opencode_argv:
+                raise SystemExit(
+                    "opencode isolation self-test failed: hostile repo passed to engine"
+                )
+            opencode_config = json.loads(
+                opencode_record["env"]["OPENCODE_CONFIG_CONTENT"]
+            )
+            if opencode_config.get("mcp") != {}:
+                raise SystemExit(
+                    "opencode isolation self-test failed: MCP config not cleared"
+                )
+            if opencode_config.get("tools", {}).get("read") is not False:
+                raise SystemExit(
+                    "opencode isolation self-test failed: read tool not disabled"
+                )
+            opencode_config_dir = Path(
+                opencode_record["env"]["OPENCODE_CONFIG_DIR"]
+            ).resolve()
+            if opencode_config_dir == repo.resolve() or is_within(
+                opencode_config_dir,
+                repo.resolve(),
+            ):
+                raise SystemExit(
+                    "opencode isolation self-test failed: config loaded from hostile repo"
+                )
             if hostile_ps_path.exists():
                 raise SystemExit("heartbeat metrics isolation self-test failed: repo-local ps executed")
 
             if record_path.exists():
                 record_path.unlink()
-            try:
-                run_cursor(args, repo, "review hostile patch")
-            except SystemExit as exc:
-                if "Cursor read permissions" not in str(exc):
-                    raise
-            else:
-                raise SystemExit("cursor isolation self-test failed: unconfined reads were allowed")
-            if record_path.exists():
-                raise SystemExit("cursor isolation self-test failed: disabled cursor was invoked")
+            run_cursor(args, repo, "review hostile patch")
+            cursor_record = json.loads(record_path.read_text())
+            cursor_argv = cursor_record["argv"]
+            for required in ["--print", "--output-format", "json"]:
+                if required not in cursor_argv:
+                    raise SystemExit(
+                        f"cursor isolation self-test failed: missing {required}"
+                    )
+            cursor_cwd = Path(cursor_record["cwd"]).resolve()
+            if cursor_cwd == repo.resolve() or is_within(
+                cursor_cwd,
+                repo.resolve(),
+            ):
+                raise SystemExit(
+                    "cursor isolation self-test failed: review ran inside hostile repo"
+                )
+            if str(repo) in cursor_argv:
+                raise SystemExit(
+                    "cursor isolation self-test failed: hostile repo passed to engine"
+                )
+            cursor_config = json.loads(cursor_record["cursor_config"])
+            denied = set(cursor_config["permissions"]["deny"])
+            for required in ("Mcp(*)", "Read(*)", "Shell(*)", "Write(*)"):
+                if required not in denied:
+                    raise SystemExit(
+                        f"cursor isolation self-test failed: missing deny {required}"
+                    )
 
             os.environ["AUTOREVIEW_FAKE_CLAUDE_VERSION"] = "2.1.168 (Claude Code)"
             try:
@@ -11585,17 +11760,27 @@ def parse_json_candidate(text: str) -> Any | None:
 
 def _assert_opencode_permission(web_search: bool) -> None:
     env = opencode_review_env(web_search)
-    if env.get("OPENCODE_DISABLE_PROJECT_CONFIG") != "1":
-        raise SystemExit("opencode isolation self-test failed: project config not disabled")
     config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
     permission = config.get("permission", {})
     if config.get("autoupdate") is not False:
         raise SystemExit("opencode isolation self-test failed: autoupdate config not disabled")
     if config.get("instructions") != [] or config.get("plugin") != [] or config.get("command") != {}:
         raise SystemExit("opencode isolation self-test failed: project-controlled extension config not cleared")
-    for disabled_tool in ("bash", "edit", "skill", "task", "todowrite", "write"):
+    for disabled_tool in (
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "write",
+    ):
         if config.get("tools", {}).get(disabled_tool) is not False:
             raise SystemExit(f"opencode isolation self-test failed: {disabled_tool} tool not disabled")
+    if config.get("mcp") != {}:
+        raise SystemExit("opencode isolation self-test failed: MCP config not cleared")
     if permission.get("*") != "deny":
         raise SystemExit("opencode isolation self-test failed: default deny missing")
     for filesystem_tool in ("read", "grep", "glob"):
@@ -11670,15 +11855,24 @@ def self_test_opencode_real_project_isolation(args: argparse.Namespace) -> None:
         if "HOSTILE_SENTINEL_DOT_OPENCODE_AGENT" not in baseline_text or "nonexistent-hostile-model" not in baseline_text:
             raise SystemExit("opencode real isolation self-test failed: hostile project config did not load in baseline")
 
+        isolated_workspace = Path(tempdir) / "isolated-workspace"
+        isolated_config = Path(tempdir) / "isolated-config"
+        isolated_workspace.mkdir()
+        isolated_config.mkdir()
         isolated = subprocess.run(
             [opencode_bin, "debug", "config", "--pure"],
-            cwd=repo,
+            cwd=isolated_workspace,
             text=True,
             encoding=SUBPROCESS_TEXT_ENCODING,
             errors=SUBPROCESS_TEXT_ERRORS,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=subprocess_env(opencode_review_env(False)),
+            env=subprocess_env(
+                {
+                    **opencode_review_env(False),
+                    "OPENCODE_CONFIG_DIR": str(isolated_config),
+                }
+            ),
         )
         isolated_text = f"{isolated.stdout}\n{isolated.stderr}"
         if isolated.returncode != 0:
@@ -12232,11 +12426,34 @@ def detected_host_engine() -> str | None:
     return None
 
 
+def executable_file(path: Path) -> bool:
+    return path.is_file() and (os.name == "nt" or os.access(path, os.X_OK))
+
+
+def known_engine_binary_paths(engine: str) -> list[Path]:
+    home = Path.home()
+    names = {
+        "codex": ("codex", "codex.exe"),
+        "claude": ("claude", "claude.exe"),
+        "pi": ("pi", "pi.exe"),
+        "opencode": ("opencode", "opencode.exe"),
+        "cursor": ("cursor-agent", "cursor-agent.exe"),
+    }.get(engine, ())
+    roots = [
+        home / ".local" / "bin",
+        home / ".cursor" / "bin",
+        home / ".opencode" / "bin",
+    ]
+    return [root / name for root in roots for name in names]
+
+
 def engine_binary(args: argparse.Namespace, engine: str) -> str | None:
     attribute = {
         "codex": "codex_bin",
         "claude": "claude_bin",
         "pi": "pi_bin",
+        "opencode": "opencode_bin",
+        "cursor": "cursor_bin",
     }.get(engine)
     if attribute is None:
         return None
@@ -12244,9 +12461,310 @@ def engine_binary(args: argparse.Namespace, engine: str) -> str | None:
     if not isinstance(value, str) or not value:
         return None
     expanded = Path(value).expanduser()
-    if expanded.is_absolute():
-        return str(expanded) if expanded.is_file() else None
-    return shutil.which(value)
+    if expanded.is_absolute() or os.sep in value or (os.altsep and os.altsep in value):
+        return str(expanded) if executable_file(expanded) else None
+    if resolved := shutil.which(value):
+        return resolved
+    for candidate in known_engine_binary_paths(engine):
+        if executable_file(candidate):
+            return str(candidate)
+    return None
+
+
+def desktop_app_candidates(engine: str) -> list[Path]:
+    home = Path.home()
+    app_names: dict[str, tuple[str, ...]] = {
+        "codex": ("Codex.app",),
+        "claude": ("Claude.app",),
+        "cursor": ("Cursor.app",),
+        "opencode": ("OpenCode.app", "opencode.app"),
+    }
+    paths = [
+        root / app_name
+        for root in (Path("/Applications"), home / "Applications")
+        for app_name in app_names.get(engine, ())
+    ]
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    windows_parts: dict[str, tuple[tuple[str, ...], ...]] = {
+        "codex": (("Programs", "Codex", "Codex.exe"),),
+        "claude": (("Programs", "Claude", "Claude.exe"),),
+        "cursor": (("Programs", "cursor", "Cursor.exe"),),
+        "opencode": (("Programs", "OpenCode", "OpenCode.exe"),),
+    }
+    if local_app_data:
+        paths.extend(
+            Path(local_app_data).joinpath(*parts)
+            for parts in windows_parts.get(engine, ())
+        )
+    for program_files_name in ("ProgramFiles", "ProgramFiles(x86)"):
+        if program_files := os.environ.get(program_files_name):
+            paths.extend(
+                Path(program_files).joinpath(*parts[1:])
+                for parts in windows_parts.get(engine, ())
+            )
+    desktop_names = {
+        "codex": ("codex.desktop",),
+        "claude": ("claude.desktop",),
+        "cursor": ("cursor.desktop",),
+        "opencode": ("opencode.desktop",),
+    }.get(engine, ())
+    paths.extend(
+        root / name
+        for root in (
+            home / ".local" / "share" / "applications",
+            Path("/usr/share/applications"),
+        )
+        for name in desktop_names
+    )
+    return paths
+
+
+def detected_desktop_app(engine: str) -> tuple[str, str | None]:
+    if (
+        engine == "codex"
+        and "desktop"
+        in os.environ.get("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", "").lower()
+    ):
+        return "active", None
+    for candidate in desktop_app_candidates(engine):
+        if candidate.exists():
+            return "installed", str(candidate)
+    return "no", None
+
+
+def harness_install_command(engine: str) -> str | None:
+    if engine == "cursor":
+        return "curl -fsSL https://cursor.com/install | bash"
+    npm_spec = NPM_HARNESS_PACKAGES.get(engine)
+    if npm_spec is None:
+        return None
+    package, ignore_scripts = npm_spec
+    parts = ["npm", "install", "-g"]
+    if ignore_scripts:
+        parts.append("--ignore-scripts")
+    parts.append(package)
+    return shlex.join(parts)
+
+
+def harness_unavailable_message(
+    args: argparse.Namespace,
+    engine: str,
+    *,
+    context: str | None = None,
+) -> str:
+    cli_name = ENGINE_CLI_NAMES.get(engine, engine)
+    desktop_state, desktop_path = detected_desktop_app(engine)
+    details = [
+        (
+            "autoreview error: harness_unavailable "
+            f"engine={engine} cli={cli_name} desktop={desktop_state} "
+            f"install_supported={'yes' if engine in INSTALLABLE_ENGINES else 'no'}"
+        ),
+        (
+            f"{context + ': ' if context else ''}{engine} requires the "
+            f"`{cli_name}` command, but no executable was detected."
+        ),
+    ]
+    if desktop_state != "no":
+        desktop_label = f" at {desktop_path}" if desktop_path else ""
+        details.append(
+            f"The {engine} desktop surface is {desktop_state}{desktop_label}; "
+            "a desktop application is not a headless autoreview harness and "
+            "does not make the CLI automatically eligible."
+        )
+    if engine in INSTALLABLE_ENGINES:
+        details.append(
+            f"Install explicitly with `autoreview --install-harness {engine}`, "
+            f"or retry the requested review with `--install-if-missing`. "
+            f"Canonical command: `{harness_install_command(engine)}`."
+        )
+    details.append(
+        "Run `autoreview --list-harnesses` for the complete capability matrix."
+    )
+    return "\n".join(details)
+
+
+def safe_installer_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in (
+        "BASH_ENV",
+        "ENV",
+        "NODE_OPTIONS",
+        "PYTHONPATH",
+        "PROMPT_COMMAND",
+        "ZDOTDIR",
+    ):
+        env.pop(key, None)
+    return env
+
+
+def run_installer_command(command: list[str], cwd: Path) -> None:
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        env=safe_installer_env(),
+        text=True,
+        encoding=SUBPROCESS_TEXT_ENCODING,
+        errors=SUBPROCESS_TEXT_ERRORS,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip(), file=sys.stderr)
+    if result.returncode != 0:
+        detail = result.stderr or result.stdout
+        raise SystemExit(
+            f"autoreview harness installation failed ({result.returncode}): "
+            f"{display_escape(detail, 4000)}"
+        )
+
+
+def install_harness(args: argparse.Namespace, engine: str) -> str:
+    if engine not in INSTALLABLE_ENGINES:
+        raise SystemExit(f"autoreview cannot install unsupported harness: {engine}")
+    if binary := engine_binary(args, engine):
+        print(f"autoreview harness already installed: {engine} ({binary})")
+        return binary
+    with tempfile.TemporaryDirectory(
+        prefix=f"autoreview-install-{engine}.",
+    ) as tempdir:
+        install_root = Path(tempdir)
+        if engine == "cursor":
+            curl_bin = shutil.which("curl")
+            bash_bin = shutil.which("bash")
+            if not curl_bin or not bash_bin:
+                raise SystemExit(
+                    "cursor installation requires `curl` and `bash`; "
+                    f"manual command: {harness_install_command(engine)}"
+                )
+            installer = install_root / "cursor-install.sh"
+            run_installer_command(
+                [
+                    curl_bin,
+                    "-fsSL",
+                    "https://cursor.com/install",
+                    "-o",
+                    str(installer),
+                ],
+                install_root,
+            )
+            try:
+                installer_stat = installer.lstat()
+            except OSError as exc:
+                raise SystemExit(
+                    "cursor installer download completed without a readable file"
+                ) from exc
+            if (
+                not stat.S_ISREG(installer_stat.st_mode)
+                or installer_stat.st_size == 0
+                or installer_stat.st_size > 2 * 1024 * 1024
+            ):
+                raise SystemExit(
+                    "cursor installer download was empty, non-regular, or unexpectedly large"
+                )
+            run_installer_command([bash_bin, str(installer)], install_root)
+        else:
+            npm_bin = shutil.which("npm")
+            if not npm_bin:
+                raise SystemExit(
+                    f"{engine} installation requires npm; manual command: "
+                    f"{harness_install_command(engine)}"
+                )
+            package, ignore_scripts = NPM_HARNESS_PACKAGES[engine]
+            command = [npm_bin, "install", "-g"]
+            if ignore_scripts:
+                command.append("--ignore-scripts")
+            command.append(package)
+            run_installer_command(command, install_root)
+    binary = engine_binary(args, engine)
+    if binary is None:
+        raise SystemExit(
+            f"{engine} installer completed, but `{ENGINE_CLI_NAMES[engine]}` "
+            "is still not executable on PATH. Start a new shell or add the "
+            "installer's bin directory to PATH, then run "
+            "`autoreview --list-harnesses`."
+        )
+    print(f"autoreview harness installed: {engine} ({binary})")
+    print(HARNESS_AUTH_HINTS[engine])
+    return binary
+
+
+def ensure_reviewer_harnesses(
+    args: argparse.Namespace,
+    reviewers: list[argparse.Namespace],
+) -> None:
+    seen: set[str] = set()
+    for reviewer in reviewers:
+        engine = reviewer.engine
+        if engine in seen:
+            continue
+        seen.add(engine)
+        if engine not in SAFE_AUTOMATIC_ENGINES:
+            raise SystemExit(
+                f"autoreview error: harness_unsupported engine={engine}\n"
+                f"{engine} does not have an isolation-safe autoreview adapter."
+            )
+        if engine_binary(args, engine) is not None:
+            continue
+        if getattr(args, "install_if_missing", False):
+            install_harness(args, engine)
+            continue
+        raise SystemExit(harness_unavailable_message(args, engine))
+
+
+def harness_version(binary: str) -> str:
+    with tempfile.TemporaryDirectory(
+        prefix="autoreview-harness-version.",
+    ) as tempdir:
+        result = run(
+            [binary, "--version"],
+            Path(tempdir),
+            check=False,
+            env=safe_engine_env(
+                Path(tempdir),
+                [Path(binary).parent],
+            ),
+        )
+    output = (result.stdout or result.stderr).strip().splitlines()
+    if result.returncode != 0 or not output:
+        return "unknown"
+    return display_escape(output[0], 200)
+
+
+def print_harnesses(args: argparse.Namespace) -> None:
+    print(
+        "harness\tcli_installed\tdesktop\tautomatic_eligible"
+        "\tstatus\tversion\tcli_path\tdesktop_path"
+    )
+    for engine in ENGINES:
+        binary = engine_binary(args, engine)
+        desktop_state, desktop_path = detected_desktop_app(engine)
+        eligible = binary is not None and engine in SAFE_AUTOMATIC_ENGINES
+        if eligible:
+            status = "ready"
+        elif engine not in SAFE_AUTOMATIC_ENGINES:
+            status = "unsupported"
+        elif desktop_state != "no":
+            status = "desktop-only"
+        else:
+            status = "cli-missing"
+        print(
+            "\t".join(
+                (
+                    engine,
+                    "yes" if binary else "no",
+                    desktop_state,
+                    "yes" if eligible else "no",
+                    status,
+                    harness_version(binary) if binary else "-",
+                    binary or "-",
+                    desktop_path or "-",
+                )
+            )
+        )
 
 
 def scored_candidates(
@@ -12302,6 +12820,55 @@ def selected_engines_from_args(args: argparse.Namespace) -> list[str]:
     return [args.engine]
 
 
+def select_distinct_candidate_engines(
+    ranked: list[tuple[str, dict[str, Any], float]],
+    reviewer_count: int,
+) -> list[tuple[str, dict[str, Any], float]]:
+    selected: list[tuple[str, dict[str, Any], float]] = []
+    used_engines: set[str] = set()
+    for item in ranked:
+        candidate_engine = item[1]["engine"]
+        if candidate_engine in used_engines:
+            continue
+        selected.append(item)
+        used_engines.add(candidate_engine)
+        if len(selected) == reviewer_count:
+            break
+    return selected
+
+
+def missing_scored_candidate_engines(
+    config: dict[str, Any],
+    args: argparse.Namespace,
+) -> list[str]:
+    host_engine = detected_host_engine()
+    ranked: list[tuple[float, str, str]] = []
+    for name, raw_candidate in config["candidates"].items():
+        if not isinstance(raw_candidate, dict):
+            continue
+        candidate = copy.deepcopy(raw_candidate)
+        engine = normalize_engine(str(candidate.get("engine", "")))
+        candidate["engine"] = engine
+        if (
+            engine not in SAFE_AUTOMATIC_ENGINES
+            or engine not in INSTALLABLE_ENGINES
+            or engine_binary(args, engine) is not None
+            or candidate_requires_manual_approval(candidate)
+        ):
+            continue
+        if (
+            config["policy"].get("avoid_same_host", True)
+            and engine == host_engine
+        ):
+            continue
+        ranked.append((-candidate_score(candidate), name, engine))
+    result: list[str] = []
+    for _score, _name, engine in sorted(ranked):
+        if engine not in result:
+            result.append(engine)
+    return result
+
+
 def select_profile_candidates(
     config: dict[str, Any],
     args: argparse.Namespace,
@@ -12320,22 +12887,56 @@ def select_profile_candidates(
             include_same_host=False,
             manual_approval_granted=False,
         )
-        selected: list[tuple[str, dict[str, Any], float]] = []
-        used_engines: set[str] = set()
-        for item in ranked:
-            candidate_engine = item[1]["engine"]
-            if candidate_engine in used_engines:
-                continue
-            selected.append(item)
-            used_engines.add(candidate_engine)
-            if len(selected) == reviewer_count:
-                break
+        selected = select_distinct_candidate_engines(ranked, reviewer_count)
+        if (
+            len(selected) < reviewer_count
+            and getattr(args, "install_if_missing", False)
+        ):
+            for engine in missing_scored_candidate_engines(config, args):
+                install_harness(args, engine)
+                ranked = scored_candidates(
+                    config,
+                    args,
+                    include_same_host=False,
+                    manual_approval_granted=False,
+                )
+                selected = select_distinct_candidate_engines(
+                    ranked,
+                    reviewer_count,
+                )
+                if len(selected) == reviewer_count:
+                    break
         if len(selected) != reviewer_count:
             host = detected_host_engine() or "none"
+            configured_engines = sorted(
+                {
+                    normalize_engine(str(candidate.get("engine", "")))
+                    for candidate in config["candidates"].values()
+                    if isinstance(candidate, dict)
+                }
+            )
+            unavailable = [
+                engine
+                for engine in configured_engines
+                if engine in SAFE_AUTOMATIC_ENGINES
+                and engine_binary(args, engine) is None
+            ]
+            unavailable_hint = (
+                "; unavailable CLIs: "
+                + ", ".join(unavailable)
+                + "; use --list-harnesses and explicitly install one with "
+                "--install-harness ENGINE"
+                if unavailable
+                else ""
+            )
             raise SystemExit(
+                "autoreview error: profile_unavailable "
+                f"profile={profile_name} required={reviewer_count} "
+                f"available={len(selected)} "
+                f"missing={','.join(unavailable) or '-'}\n"
                 f"profile {profile_name!r} needs {reviewer_count} available, "
                 f"isolation-safe reviewer(s), but found {len(selected)} "
-                f"(detected host: {host})"
+                f"(detected host: {host}){unavailable_hint}"
             )
         return selected
 
@@ -12354,10 +12955,16 @@ def select_profile_candidates(
                 "autoreview isolation"
             )
         if engine_binary(args, candidate["engine"]) is None:
-            raise SystemExit(
-                f"candidate {candidate_name!r} requires unavailable "
-                f"{candidate['engine']} CLI"
-            )
+            if getattr(args, "install_if_missing", False):
+                install_harness(args, candidate["engine"])
+            else:
+                raise SystemExit(
+                    harness_unavailable_message(
+                        args,
+                        candidate["engine"],
+                        context=f"candidate {candidate_name!r}",
+                    )
+                )
         selected.append((candidate_name, candidate, candidate_score(candidate)))
     return selected
 
@@ -12526,7 +13133,44 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--opencode-bin", default=os.environ.get("OPENCODE_BIN", "opencode"))
     parser.add_argument("--pi-bin", default=os.environ.get("PI_BIN", "pi"))
-    parser.add_argument("--no-tools", dest="tools", action="store_false", default=True, help="Disable tools for engines that support it. Codex, Droid, copilot, opencode, and cursor reject no-tools review.")
+    parser.add_argument(
+        "--list-harnesses",
+        action="store_true",
+        help=(
+            "List detected reviewer CLIs, versions, and automatic-selection "
+            "eligibility without running a review."
+        ),
+    )
+    parser.add_argument(
+        "--install-harness",
+        action="append",
+        choices=INSTALLABLE_ENGINES,
+        help=(
+            "Explicitly install a missing reviewer CLI using its canonical "
+            "vendor package or installer, verify detection, print the auth "
+            "next step, and exit. Repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--install-if-missing",
+        action="store_true",
+        help=(
+            "Explicitly permit installation of a missing CLI selected by "
+            "--engine, --reviewers, --panel, or a profile. For a scored "
+            "profile that lacks quorum, install the highest-scoring missing "
+            "isolation-safe harness; without this flag no software is downloaded."
+        ),
+    )
+    parser.add_argument(
+        "--no-tools",
+        dest="tools",
+        action="store_false",
+        default=True,
+        help=(
+            "Disable optional reviewer tools. OpenCode, Cursor, and Pi always "
+            "run without repository, filesystem, shell, edit, plugin, or MCP tools."
+        ),
+    )
     parser.add_argument("--self-test", action="store_true", help="Run deterministic local autoreview self-tests.")
     parser.add_argument("--self-test-opencode-jsonl-parser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--self-test-opencode-isolation", action="store_true", help=argparse.SUPPRESS)
@@ -12563,13 +13207,13 @@ def parse_args() -> argparse.Namespace:
         dest="cursor_allow_workspace_instructions",
         action="store_true",
         default=None,
-        help="Legacy compatibility flag. Cursor review is unavailable because reads cannot be confined to the repository.",
+        help="Legacy compatibility flag retained for CLI compatibility; Cursor always reviews from an empty workspace.",
     )
     parser.add_argument(
         "--no-cursor-allow-workspace-instructions",
         dest="cursor_allow_workspace_instructions",
         action="store_false",
-        help="Legacy compatibility flag. Cursor review remains unavailable.",
+        help="Legacy compatibility flag retained for CLI compatibility; Cursor always reviews from an empty workspace.",
     )
     parser.add_argument("--parallel-tests", help="Run a test command concurrently with review; failure fails the helper.")
     parser.add_argument(
@@ -12765,7 +13409,11 @@ def reviewer_args(args: argparse.Namespace) -> list[argparse.Namespace]:
         clone.model = model
         clone.thinking = thinking
         clone.fallback_model = fallback_model
-        clone.tools = False if engine in {"droid", "pi"} else args.tools
+        clone.tools = (
+            False
+            if engine in {"droid", "pi", "opencode", "cursor"}
+            else args.tools
+        )
         result.append(clone)
     return result
 
@@ -13308,6 +13956,14 @@ def atomic_write_text(path: Path, content: str) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.install_harness:
+        for engine in dict.fromkeys(args.install_harness):
+            install_harness(args, engine)
+        if not args.list_harnesses:
+            return 0
+    if args.list_harnesses:
+        print_harnesses(args)
+        return 0
     if args.self_test:
         return self_test()
     if args.self_test_opencode_jsonl_parser:
@@ -13356,6 +14012,7 @@ def main() -> int:
             )
         target_mode = "branch"
     reviewers = reviewer_args(args)
+    ensure_reviewer_harnesses(args, reviewers)
     enforce_reviewer_policy(reviewers, args)
     reject_repo_output_paths(args, repo)
     target, target_ref = choose_target(repo, target_mode, args.base)

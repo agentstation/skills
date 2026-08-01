@@ -12,12 +12,17 @@ long_sentence = "error"
 semicolon = "error"
 contraction = "error"
 passive_voice = "warning"
+complex_verb = "warning"
 ing_main_verb = "warning"
 nominalization = "warning"
 phrasal_verb = "warning"
 banned_word = "error"
 marketing_adjective = "error"
 modal_hedge = "error"
+formulaic_phrase = "warning"
+negative_parallelism = "warning"
+assistant_scaffold = "warning"
+restricted_vocabulary = "warning"
 long_paragraph = "error"
 em_dash = "error"
 glossary_term = "error"
@@ -25,6 +30,10 @@ glossary_term = "error"
 [terms]
 additional_banned = []
 allowed = []
+
+[restricted_vocabulary]
+additional = []
+exceptions = []
 
 [glossary]
 path = "GLOSSARY.md"
@@ -35,48 +44,77 @@ ignored_candidates = [
   "agent-skills",
   "AGENTS",
   "AGENTS_HOME",
+  "AI",
   "API",
   "architecture-sensitive",
   "ASD",
+  "assistant_scaffold",
   "automatic-selection",
   "avoid_same_host",
   "build-with-claude",
   "built-in",
+  "C-like",
   "claude-code",
   "claude-opus-5",
   "Claude-side",
   "CLI",
   "code-review",
+  "ChatGPT",
   "CONFIG",
+  "controlled-writing",
   "deepswe_avg_cost_usd",
   "developer-facing",
+  "earendil-works",
+  "false-positive",
+  "formulaic-style",
+  "formulaic_phrase",
+  "full-line",
+  "getting-started",
   "GitHub",
+  "glm-5",
   "GLOSSARY",
   "GPT",
   "GPT-5",
+  "grok-4",
   "HOME",
+  "HTML",
   "ID",
   "ignored_candidates",
   "isolation-safe",
+  "K3",
+  "kimi-k3",
   "long-lived",
+  "machine-readable",
   "manual_approval_required",
+  "MIT",
   "MODEL_SELECTION",
+  "multi-word",
+  "negative_parallelism",
+  "opt-in",
+  "owner-calibrated",
   "P0",
+  "pi-coding-agent",
   "PR",
   "pre-PR",
   "project-specific",
   "prompt-engineering",
+  "protected-content",
+  "quote-aware",
   "second-model",
+  "Security-review",
   "security-panel",
   "self-tests",
   "SKILL",
   "STE100",
   "substantive-code",
   "substantive_only",
+  "restricted_vocabulary",
   "technical-artifacts",
   "technical-writing",
   "TECHNICAL_WRITING",
+  "TOML",
   "UPSTREAM",
+  "YAML",
 ]
 scan = [
   "README.md",

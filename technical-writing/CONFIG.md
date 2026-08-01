@@ -27,6 +27,8 @@ cp ~/.agents/skills/technical-writing/config.example.toml \
 developer-facing web content. Configured warnings can pass when their density
 does not exceed `max_warnings_per_100_words`.
 
+The modes control enforcement severity.
+
 The density calculation uses a 100-word minimum. One warning in a short reply
 therefore counts as one warning per 100 words.
 
@@ -54,6 +56,48 @@ example, allowing `ensure` does not also allow `ensures` or `ensuring`.
 
 Use the glossary for concept aliases. The linter applies avoided aliases from
 approved glossary rows. It does not apply aliases from draft rows.
+
+## Formulaic style
+
+The formulaic-style rules enforce direct and specific technical prose.
+
+- `formulaic_phrase` reports selected stock phrases.
+- `negative_parallelism` reports selected rhetorical contrast forms.
+- `assistant_scaffold` reports canned assistant preambles and closings.
+- `restricted_vocabulary` reports each restricted word.
+
+Configure project vocabulary with `[restricted_vocabulary]`:
+
+- `additional` adds exact project-specific words or phrases.
+- `exceptions` permits an exact restricted form for a technical reason.
+
+`[terms].allowed` suppresses an exact mechanical match across rule groups. An
+approved glossary term is also protected. List each permitted inflection.
+
+Term protection suppresses a finding on the approved term itself. A larger
+formulaic phrase or rhetorical pattern that contains the term can still
+produce a warning.
+
+The linter protects code, code-like identifiers, block quotations, paired
+double quotations, recognized log records, Markdown tables, front matter,
+URLs, approved glossary terms, and explicit exceptions. See
+`references/formulaic-style.md` for the review boundary.
+
+## Source comments
+
+Directory scans include supported source files and lint only extracted comments
+or docstrings. The linter does not process executable code as prose.
+
+- Python uses token and syntax-tree parsing for comments and docstrings.
+- C-like languages use line-comment and block-comment parsing.
+- Shell and Ruby use full-line hash comments.
+- TOML and YAML use quote-aware hash comments.
+- HTML uses markup-aware extraction for visible text and comment blocks. It
+  protects code, quotation, script, style, and table elements.
+
+An explicitly named source file needs a supported parser. The command exits
+with status `2` instead of processing an unsupported source or structured-data
+file as prose. Pass extracted prose on standard input when no parser exists.
 
 ## Glossary discovery
 

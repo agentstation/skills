@@ -12,12 +12,17 @@ long_sentence = "error"
 semicolon = "error"
 contraction = "error"
 passive_voice = "warning"
+complex_verb = "warning"
 ing_main_verb = "warning"
 nominalization = "warning"
 phrasal_verb = "warning"
 banned_word = "error"
 marketing_adjective = "error"
 modal_hedge = "error"
+formulaic_phrase = "warning"
+negative_parallelism = "warning"
+assistant_scaffold = "warning"
+restricted_vocabulary = "warning"
 long_paragraph = "error"
 em_dash = "error"
 glossary_term = "error"
@@ -25,6 +30,10 @@ glossary_term = "error"
 [terms]
 additional_banned = []
 allowed = []
+
+[restricted_vocabulary]
+additional = []
+exceptions = []
 
 [glossary]
 path = "GLOSSARY.md"
