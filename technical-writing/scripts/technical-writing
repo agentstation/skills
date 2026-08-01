@@ -1711,16 +1711,23 @@ def discovered_file(
 
 
 def exception_reaches_inside(relative: Path, pattern: str) -> bool:
-    """Report whether an exception pattern can match below this directory."""
+    """Report whether an exception pattern can match below this directory.
+
+    `path_is_excluded` matches a pattern against the whole relative path, one
+    path segment, or the file name. Its wildcards cross a path separator, so
+    the walk keeps a directory whenever a pattern still has a wildcard left.
+    A pattern without a separator matches a name at any depth.
+    """
     if "/" not in pattern:
         return True
     segments = pattern.split("/")
     for index, part in enumerate(relative.parts):
         if index >= len(segments):
             return False
-        if segments[index] == "**":
+        segment = segments[index]
+        if segment == "**" or glob.has_magic(segment):
             return True
-        if not fnmatch.fnmatch(part, segments[index]):
+        if part != segment:
             return False
     return True
 

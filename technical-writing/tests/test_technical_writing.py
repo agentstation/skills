@@ -1353,6 +1353,38 @@ exceptions = ["intricate"]
             ["README.md", "notes.md", "technical-writing.toml", "vendored.md"],
         )
 
+    def test_files_exceptions_accept_a_wildcard_path(self) -> None:
+        self.write_discovery_tree()
+        self.write_project_config(
+            'version = 1\n[files]\nexceptions = ["node_modules/*.md"]\n'
+        )
+        self.assertEqual(
+            self.discovered_paths("."),
+            [
+                "README.md",
+                "notes.md",
+                "readme.md",
+                "technical-writing.toml",
+                "vendored.md",
+            ],
+        )
+
+    def test_files_exceptions_accept_a_directory_subtree(self) -> None:
+        self.write_discovery_tree()
+        self.write_project_config(
+            'version = 1\n[files]\nexceptions = ["node_modules/package/**"]\n'
+        )
+        self.assertEqual(
+            self.discovered_paths("."),
+            [
+                "README.md",
+                "notes.md",
+                "readme.md",
+                "technical-writing.toml",
+                "vendored.md",
+            ],
+        )
+
     def test_files_exceptions_restore_a_generated_file(self) -> None:
         self.write_discovery_tree()
         self.write_project_config(

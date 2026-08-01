@@ -144,8 +144,10 @@ exceptions = ["CHANGELOG.md"]
   with a generated marker.
 
 Each pattern matches the project-relative path, any path segment, or the file
-name. A pattern that names a path inside an excluded directory makes the scan
-descend into that directory.
+name. A wildcard crosses a path separator. Write `vendor/docs/**` to name a
+whole subtree, because a pattern with a separator matches no path below
+itself. A pattern that names a path inside an excluded directory makes the
+scan descend into that directory.
 
 `[glossary].exclude` still applies to glossary candidate scans. Those scans
 use the same automatic exclusions.
