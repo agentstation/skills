@@ -1289,6 +1289,9 @@ exceptions = ["intricate"]
             "This robust library is being leveraged by many teams.\n",
             encoding="utf-8",
         )
+        (vendored / "vendored.md").write_text(
+            "The adapter maps the record.\n", encoding="utf-8"
+        )
         generated = self.project / "docs"
         generated.mkdir()
         (generated / "api.md").write_text(
@@ -1332,7 +1335,32 @@ exceptions = ["intricate"]
                 "notes.md",
                 "readme.md",
                 "technical-writing.toml",
+                "vendored.md",
             ],
+        )
+
+    def test_files_exceptions_restore_a_file_inside_an_excluded_directory(
+        self,
+    ) -> None:
+        self.write_discovery_tree()
+        self.write_project_config(
+            "version = 1\n"
+            "[files]\n"
+            'exceptions = ["node_modules/package/vendored.md"]\n'
+        )
+        self.assertEqual(
+            self.discovered_paths("."),
+            ["README.md", "notes.md", "technical-writing.toml", "vendored.md"],
+        )
+
+    def test_files_exceptions_restore_a_generated_file(self) -> None:
+        self.write_discovery_tree()
+        self.write_project_config(
+            'version = 1\n[files]\nexceptions = ["docs/api.md"]\n'
+        )
+        self.assertEqual(
+            self.discovered_paths("."),
+            ["README.md", "api.md", "notes.md", "technical-writing.toml"],
         )
 
     def test_invalid_files_config_exits_two(self) -> None:

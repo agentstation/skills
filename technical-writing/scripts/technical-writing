@@ -1688,16 +1688,57 @@ def declares_generated(path: Path) -> bool:
     return bool(GENERATED_MARKER.search(head))
 
 
-def discovery_excluded(
+def discovered_file(
     path: Path,
     project_root: Path,
     settings: dict[str, Any],
-    defaults: tuple[str, ...],
 ) -> bool:
+    """Report whether a directory scan lints this file.
+
+    An exception wins over every exclusion, including the generated marker.
+    """
     relative = match_path(path, project_root)
     if path_is_excluded(relative, settings["exceptions"]):
+        return True
+    excluded = (
+        list(DEFAULT_EXCLUDED_DIRECTORIES)
+        + list(DEFAULT_EXCLUDED_FILES)
+        + settings["exclude"]
+    )
+    if path_is_excluded(relative, excluded):
         return False
-    return path_is_excluded(relative, list(defaults) + settings["exclude"])
+    return not declares_generated(path)
+
+
+def exception_reaches_inside(relative: Path, pattern: str) -> bool:
+    """Report whether an exception pattern can match below this directory."""
+    if "/" not in pattern:
+        return True
+    segments = pattern.split("/")
+    for index, part in enumerate(relative.parts):
+        if index >= len(segments):
+            return False
+        if segments[index] == "**":
+            return True
+        if not fnmatch.fnmatch(part, segments[index]):
+            return False
+    return True
+
+
+def directory_pruned(
+    path: Path,
+    project_root: Path,
+    settings: dict[str, Any],
+) -> bool:
+    relative = match_path(path, project_root)
+    if any(
+        exception_reaches_inside(relative, pattern)
+        for pattern in settings["exceptions"]
+    ):
+        return False
+    return path_is_excluded(
+        relative, list(DEFAULT_EXCLUDED_DIRECTORIES) + settings["exclude"]
+    )
 
 
 def discover_prose_files(root: Path, config: Config) -> list[Path]:
@@ -1709,19 +1750,13 @@ def discover_prose_files(root: Path, config: Config) -> list[Path]:
         directories[:] = sorted(
             name
             for name in directories
-            if not discovery_excluded(
-                parent / name, project_root, settings, DEFAULT_EXCLUDED_DIRECTORIES
-            )
+            if not directory_pruned(parent / name, project_root, settings)
         )
         for name in sorted(names):
             candidate = parent / name
             if not candidate.is_file() or not path_has_supported_prose(candidate):
                 continue
-            if discovery_excluded(
-                candidate, project_root, settings, DEFAULT_EXCLUDED_FILES
-            ):
-                continue
-            if declares_generated(candidate):
+            if not discovered_file(candidate, project_root, settings):
                 continue
             found.append(candidate)
     return found
@@ -1892,14 +1927,8 @@ def scan_files(config: Config, glossary: Path) -> list[Path]:
             for path in paths:
                 if not path.is_file() or path.resolve() == glossary.resolve():
                     continue
-                if recursed and (
-                    discovery_excluded(
-                        path,
-                        config.project_root,
-                        config.data["files"],
-                        DEFAULT_EXCLUDED_DIRECTORIES + DEFAULT_EXCLUDED_FILES,
-                    )
-                    or declares_generated(path)
+                if recursed and not discovered_file(
+                    path, config.project_root, config.data["files"]
                 ):
                     continue
                 try:

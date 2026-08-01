@@ -139,11 +139,15 @@ exceptions = ["CHANGELOG.md"]
 ```
 
 - `exclude` adds project patterns to the built-in list.
-- `exceptions` restores a path the built-in list removes. It wins over both
-  lists.
+- `exceptions` restores a path that an exclusion removes. It wins over every
+  exclusion. It also restores a file inside an excluded directory and a file
+  with a generated marker.
 
 Each pattern matches the project-relative path, any path segment, or the file
-name. `[glossary].exclude` still applies to glossary candidate scans, which
+name. A pattern that names a path inside an excluded directory makes the scan
+descend into that directory.
+
+`[glossary].exclude` still applies to glossary candidate scans. Those scans
 use the same automatic exclusions.
 
 ## Glossary discovery
