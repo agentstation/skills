@@ -27,6 +27,12 @@ long_paragraph = "error"
 em_dash = "error"
 glossary_term = "error"
 
+[files]
+# Extra directory-scan exclusions. See CONFIG.md for the built-in list.
+exclude = []
+# Paths that the built-in exclusions must not remove.
+exceptions = []
+
 [terms]
 additional_banned = []
 allowed = []

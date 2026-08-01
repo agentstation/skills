@@ -356,6 +356,10 @@ BUILTINS: dict[str, Any] = {
         "em_dash": "warning",
         "glossary_term": "error",
     },
+    "files": {
+        "exclude": [],
+        "exceptions": [],
+    },
     "terms": {
         "additional_banned": [],
         "allowed": [],
@@ -399,6 +403,79 @@ TEXT_SUFFIXES = {
 }
 PROSE_SUFFIXES = {".md", ".mdx", ".rst", ".txt"}
 PROSE_NAMES = {"CHANGELOG", "CONTRIBUTING", "LICENSE", "README"}
+
+# Directory scans skip these paths. An explicitly named path still lints.
+DEFAULT_EXCLUDED_DIRECTORIES = (
+    ".bundle",
+    ".cache",
+    ".dart_tool",
+    ".git",
+    ".gradle",
+    ".mypy_cache",
+    ".next",
+    ".nox",
+    ".nuxt",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svelte-kit",
+    ".terraform",
+    ".tox",
+    ".venv",
+    "Pods",
+    "__fixtures__",
+    "__pycache__",
+    "__snapshots__",
+    "bower_components",
+    "build",
+    "coverage",
+    "dist",
+    "fixtures",
+    "htmlcov",
+    "node_modules",
+    "site-packages",
+    "target",
+    "testdata",
+    "third_party",
+    "vendor",
+    "venv",
+)
+
+# Boilerplate, licensed, or generated files that a project cannot rewrite.
+DEFAULT_EXCLUDED_FILES = (
+    "AUTHORS*",
+    "CHANGELOG*",
+    "CODE_OF_CONDUCT*",
+    "CONTRIBUTORS*",
+    "COPYING*",
+    "LICENCE*",
+    "LICENSE*",
+    "NOTICE*",
+    "PATENTS*",
+    "go.sum",
+    "*.lock",
+    "*-lock.json",
+    "*-lock.yaml",
+    "*.lock.json",
+    "*.min.js",
+    "*.min.css",
+    "*.bundle.js",
+    "*.d.ts",
+    "*.pb.go",
+    "*_pb2.py",
+    "*_pb2_grpc.py",
+    "*.g.dart",
+    "*.freezed.dart",
+    "*.gen.go",
+    "*_generated.go",
+    "*.generated.*",
+)
+
+GENERATED_MARKER = re.compile(
+    r"@generated\b|code generated\b.{0,80}?\bdo not edit",
+    re.IGNORECASE,
+)
+GENERATED_MARKER_BYTES = 4096
+
 PYTHON_SOURCE_SUFFIXES = {".py"}
 C_LIKE_SOURCE_SUFFIXES = {
     ".c",
@@ -593,6 +670,15 @@ def normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     minimum = glossary.get("candidate_min_occurrences")
     if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 1:
         raise CliError("glossary.candidate_min_occurrences must be a positive integer")
+    files = result.get("files")
+    if not isinstance(files, dict):
+        raise CliError("[files] must be a table")
+    for key in ("exclude", "exceptions"):
+        value = files.get(key)
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item for item in value
+        ):
+            raise CliError(f"files.{key} must be an array of non-empty strings")
     terms = result.get("terms")
     if not isinstance(terms, dict):
         raise CliError("[terms] must be a table")
@@ -1585,7 +1671,63 @@ def prepare_lint_text(path: Path, text: str) -> str:
     return source_prose(path, text)
 
 
-def expand_lint_inputs(arguments: list[str]) -> list[tuple[str, str]]:
+def match_path(path: Path, project_root: Path) -> Path:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(project_root)
+    except ValueError:
+        return Path(*resolved.parts[1:]) if len(resolved.parts) > 1 else resolved
+
+
+def declares_generated(path: Path) -> bool:
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            head = handle.read(GENERATED_MARKER_BYTES)
+    except OSError:
+        return False
+    return bool(GENERATED_MARKER.search(head))
+
+
+def discovery_excluded(
+    path: Path,
+    project_root: Path,
+    settings: dict[str, Any],
+    defaults: tuple[str, ...],
+) -> bool:
+    relative = match_path(path, project_root)
+    if path_is_excluded(relative, settings["exceptions"]):
+        return False
+    return path_is_excluded(relative, list(defaults) + settings["exclude"])
+
+
+def discover_prose_files(root: Path, config: Config) -> list[Path]:
+    settings = config.data["files"]
+    project_root = config.project_root
+    found: list[Path] = []
+    for current, directories, names in os.walk(root):
+        parent = Path(current)
+        directories[:] = sorted(
+            name
+            for name in directories
+            if not discovery_excluded(
+                parent / name, project_root, settings, DEFAULT_EXCLUDED_DIRECTORIES
+            )
+        )
+        for name in sorted(names):
+            candidate = parent / name
+            if not candidate.is_file() or not path_has_supported_prose(candidate):
+                continue
+            if discovery_excluded(
+                candidate, project_root, settings, DEFAULT_EXCLUDED_FILES
+            ):
+                continue
+            if declares_generated(candidate):
+                continue
+            found.append(candidate)
+    return found
+
+
+def expand_lint_inputs(arguments: list[str], config: Config) -> list[tuple[str, str]]:
     if not arguments:
         return [("<stdin>", sys.stdin.read())]
     expanded: list[Path | str] = []
@@ -1602,11 +1744,7 @@ def expand_lint_inputs(arguments: list[str]) -> list[tuple[str, str]]:
         for match in sorted(matches):
             path = Path(match)
             if path.is_dir():
-                expanded.extend(
-                    child
-                    for child in sorted(path.rglob("*"))
-                    if child.is_file() and path_has_supported_prose(child)
-                )
+                expanded.extend(discover_prose_files(path, config))
             elif path.is_file():
                 expanded.append(path)
     results: list[tuple[str, str]] = []
@@ -1661,7 +1799,7 @@ def command_lint(args: argparse.Namespace, config: Config) -> int:
     prohibited, approved_terms = glossary_lint_terms(
         glossary, config.data["glossary"]["require_approved_definitions"]
     )
-    documents = expand_lint_inputs(args.paths)
+    documents = expand_lint_inputs(args.paths, config)
     results: list[dict[str, Any]] = []
     all_diagnostics: list[Diagnostic] = []
     word_total = sum(word_count(strip_code(text)) for _, text in documents)
@@ -1749,9 +1887,20 @@ def scan_files(config: Config, glossary: Path) -> list[Path]:
         for match in matches:
             if not match.exists():
                 continue
-            paths = match.rglob("*") if match.is_dir() else (match,)
+            recursed = match.is_dir()
+            paths = match.rglob("*") if recursed else (match,)
             for path in paths:
                 if not path.is_file() or path.resolve() == glossary.resolve():
+                    continue
+                if recursed and (
+                    discovery_excluded(
+                        path,
+                        config.project_root,
+                        config.data["files"],
+                        DEFAULT_EXCLUDED_DIRECTORIES + DEFAULT_EXCLUDED_FILES,
+                    )
+                    or declares_generated(path)
+                ):
                     continue
                 try:
                     relative = path.resolve().relative_to(config.project_root)

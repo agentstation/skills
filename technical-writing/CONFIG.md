@@ -99,6 +99,53 @@ An explicitly named source file needs a supported parser. The command exits
 with status `2` instead of processing an unsupported source or structured-data
 file as prose. Pass extracted prose on standard input when no parser exists.
 
+## Automatic exclusions
+
+A directory scan skips paths that the project did not write and cannot
+rewrite. An explicitly named path always lints, so
+`technical-writing lint LICENSE` still reports diagnostics.
+
+The linter skips these directories and everything under them:
+
+```text
+.bundle .cache .dart_tool .git .gradle .mypy_cache .next .nox .nuxt
+.pytest_cache .ruff_cache .svelte-kit .terraform .tox .venv Pods
+__fixtures__ __pycache__ __snapshots__ bower_components build coverage
+dist fixtures htmlcov node_modules site-packages target testdata
+third_party vendor venv
+```
+
+It skips these files by name pattern:
+
+- Legal and community boilerplate: `LICENSE*`, `LICENCE*`, `COPYING*`,
+  `NOTICE*`, `PATENTS*`, `AUTHORS*`, `CONTRIBUTORS*`, `CODE_OF_CONDUCT*`.
+- Release output: `CHANGELOG*`.
+- Dependency locks: `*.lock`, `*-lock.json`, `*-lock.yaml`, `*.lock.json`,
+  `go.sum`.
+- Build output: `*.min.js`, `*.min.css`, `*.bundle.js`.
+- Generated code: `*.d.ts`, `*.pb.go`, `*_pb2.py`, `*_pb2_grpc.py`,
+  `*.g.dart`, `*.freezed.dart`, `*.gen.go`, `*_generated.go`,
+  `*.generated.*`.
+
+It also skips any discovered file whose first 4096 characters contain
+`@generated` or a `Code generated ... DO NOT EDIT` marker.
+
+The `[files]` table adjusts the list:
+
+```toml
+[files]
+exclude = ["docs/vendor-guide.md"]
+exceptions = ["CHANGELOG.md"]
+```
+
+- `exclude` adds project patterns to the built-in list.
+- `exceptions` restores a path the built-in list removes. It wins over both
+  lists.
+
+Each pattern matches the project-relative path, any path segment, or the file
+name. `[glossary].exclude` still applies to glossary candidate scans, which
+use the same automatic exclusions.
+
 ## Glossary discovery
 
 The `[glossary].path` value is relative to the project configuration

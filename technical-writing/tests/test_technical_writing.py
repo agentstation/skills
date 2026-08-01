@@ -1266,6 +1266,82 @@ exceptions = ["intricate"]
         self.assertEqual(result.returncode, 2)
         self.assertIn("must be an array of non-empty strings", result.stderr)
 
+    def write_discovery_tree(self) -> None:
+        (self.project / "README.md").write_text(
+            "The parser reads the file.\n", encoding="utf-8"
+        )
+        (self.project / "LICENSE").write_text(
+            "Permission is hereby granted, free of charge, to any person "
+            "obtaining a copy of this software and associated documentation "
+            "files, to deal in the Software without restriction.\n",
+            encoding="utf-8",
+        )
+        (self.project / "CHANGELOG.md").write_text(
+            "The release was shipped by the robust release tooling.\n",
+            encoding="utf-8",
+        )
+        (self.project / "notes.md").write_text(
+            "The command writes the report.\n", encoding="utf-8"
+        )
+        vendored = self.project / "node_modules" / "package"
+        vendored.mkdir(parents=True)
+        (vendored / "readme.md").write_text(
+            "This robust library is being leveraged by many teams.\n",
+            encoding="utf-8",
+        )
+        generated = self.project / "docs"
+        generated.mkdir()
+        (generated / "api.md").write_text(
+            "<!-- @generated -->\nThe endpoint was called by the client.\n",
+            encoding="utf-8",
+        )
+
+    def discovered_paths(self, *arguments: str) -> list[str]:
+        result = self.run_cli("lint", *arguments, "--format", "json")
+        payload = json.loads(result.stdout)
+        return sorted(Path(item["path"]).name for item in payload["documents"])
+
+    def test_directory_scan_skips_boilerplate_and_generated_paths(self) -> None:
+        self.write_discovery_tree()
+        self.assertEqual(self.discovered_paths("."), ["README.md", "notes.md"])
+
+    def test_explicit_path_lints_an_excluded_file(self) -> None:
+        self.write_discovery_tree()
+        result = self.run_cli("lint", "LICENSE", "--format", "json")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["summary"]["files"], 1)
+        self.assertTrue(payload["documents"][0]["diagnostics"])
+
+    def test_files_exclude_adds_a_project_pattern(self) -> None:
+        self.write_discovery_tree()
+        self.write_project_config('version = 1\n[files]\nexclude = ["notes.md"]\n')
+        self.assertEqual(
+            self.discovered_paths("."), ["README.md", "technical-writing.toml"]
+        )
+
+    def test_files_exceptions_restore_a_default_exclusion(self) -> None:
+        self.write_discovery_tree()
+        self.write_project_config(
+            'version = 1\n[files]\nexceptions = ["CHANGELOG.md", "node_modules"]\n'
+        )
+        self.assertEqual(
+            self.discovered_paths("."),
+            [
+                "CHANGELOG.md",
+                "README.md",
+                "notes.md",
+                "readme.md",
+                "technical-writing.toml",
+            ],
+        )
+
+    def test_invalid_files_config_exits_two(self) -> None:
+        config = self.root / "bad-files.toml"
+        config.write_text('[files]\nexclude = "LICENSE"\n', encoding="utf-8")
+        result = self.run_cli("lint", "-", "--config", str(config), input_text="Text.")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("files.exclude must be an array", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
