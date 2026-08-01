@@ -4,97 +4,28 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 
 ## Skills
 
-- `autoreview`: isolated, structured second-model review with layered model
-  profiles and a substantive-code pre-PR gate.
-- `plans`: durable control-plane implementation plans with status ledgers,
-  verifiable task criteria, goal-driven autonomous execution, and
-  self-cleanup on merge.
-- `technical-writing`: controlled, lintable developer writing for
-  agent responses, documentation, prompts, tool descriptions, technical web
-  pages, procedures, and other technical prose.
+| Skill | What it does | Details |
+|---|---|---|
+| `autoreview` | Runs an isolated second-model code review at a pre-PR gate or a configured checkpoint. | [autoreview/README.md](autoreview/README.md) |
+| `plans` | Keeps a durable plan that owns one outcome, with a status ledger, verifiable task criteria, and autonomous execution. | [plans/README.md](plans/README.md) |
+| `technical-writing` | Applies controlled, lintable writing rules to developer-facing prose. | [technical-writing/README.md](technical-writing/README.md) |
 
-Install globally with the shared canonical directory:
+## Install
 
-```bash
-npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code
-```
-
-Install the default writing style for Codex, Claude Code, and Goose:
+Each skill installs into the shared `~/.agents/skills` directory:
 
 ```bash
+npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code -y
+npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill technical-writing -g \
   -a codex -a claude-code -a goose -y
 ```
 
-Install the plans skill the same way:
-
-```bash
-npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
-```
-
-Installation makes a skill available but does not make its use unconditional.
-Add this small bootstrap to each harness's persistent user instructions:
-
-```markdown
-## Default writing style
-
-Use the installed `technical-writing` skill for all
-developer-facing prose. Apply `developer` mode to every response for a
-technical user. Use `strict` mode for procedures, safety text, and tightly
-controlled errors. Preserve facts, uncertainty, glossary terms, identifiers,
-commands, code, logs, and structured data.
-```
-
-Use `~/.codex/AGENTS.md` for Codex, `~/.claude/CLAUDE.md` for Claude Code, and
-`~/.config/goose/.goosehints` for Goose. Other harnesses need the equivalent
-persistent user-instruction file. The shared `~/.agents/skills` directory still
-provides one canonical skill copy.
-
 The agent flags create the harness links. A manual link for each skill is not
-required. Compatible harnesses that read `~/.agents/skills` can use the same
+required. Compatible harnesses that read `~/.agents/skills` use the same
 canonical copy.
 
-## Technical-writing setup
-
-The linter requires Python 3.11 or later. Set its path after installation:
-
-```bash
-export TECHNICAL_WRITING="${AGENTS_HOME:-$HOME/.agents}/skills/technical-writing/scripts/technical-writing"
-```
-
-Copy the example to set a user-wide default:
-
-```bash
-mkdir -p ~/.config/agentstation
-cp ~/.agents/skills/technical-writing/config.example.toml \
-  ~/.config/agentstation/technical-writing.toml
-```
-
-A repository can override that file with
-`.agents/technical-writing.toml`. Create and review the project glossary:
-
-```bash
-"$TECHNICAL_WRITING" glossary init
-"$TECHNICAL_WRITING" glossary check
-"$TECHNICAL_WRITING" glossary update --check
-```
-
-The initializer adds draft candidates. A person must define and approve each
-real project term. Put reviewed scanner noise in `ignored_candidates`.
-
-To migrate from the earlier name, install `technical-writing`,
-update the persistent instruction, verify a fresh session, and then remove the
-old skill:
-
-```bash
-npx skills remove writing-clearly -g -y
-```
-
-Install from the GitHub source shown above for normal use. Local-path installs
-are useful during development, but they do not record updateable GitHub source
-metadata in the global skill lock.
-
-Update installed global skills with:
+Update every installed global skill with:
 
 ```bash
 npx skills update -g
@@ -104,7 +35,42 @@ The global skill lock records source and content metadata. It does not pin a
 GitHub commit. Review upstream changes before a global update when
 reproducibility matters.
 
+Install from the GitHub source shown above for normal use. A local-path
+install helps during development, but it records no updateable GitHub source
+metadata.
+
+## Make a skill unconditional
+
+Installation makes a skill available. It does not make the skill's use
+unconditional. Add a bootstrap rule to each harness's persistent user
+instructions:
+
+```markdown
+## Default writing style
+
+Use the installed `technical-writing` skill for all developer-facing prose.
+Apply `developer` mode to every response for a technical user. Use `strict`
+mode for procedures, safety text, and tightly controlled errors. Preserve
+facts, uncertainty, glossary terms, identifiers, commands, code, logs, and
+structured data.
+```
+
+Use `~/.codex/AGENTS.md` for Codex, `~/.claude/CLAUDE.md` for Claude Code, and
+`~/.config/goose/.goosehints` for Goose. Other harnesses need the equivalent
+persistent user-instruction file.
+
+## Repository layout
+
 The repository uses the Agent Skills `<name>/SKILL.md` layout at its root. The
 `skills` CLI discovers this flat collection and verifies that each frontmatter
-name matches its directory. See each skill's `UPSTREAM.md` for derivative
-provenance.
+name matches its directory. `SKILL.md` addresses the agent. Each `README.md`
+addresses a person. `GLOSSARY.md` holds the approved terms for this
+repository.
+
+Validate every skill after a change:
+
+```bash
+./scripts/validate-skills
+```
+
+See each skill's `UPSTREAM.md` for derivative provenance.
