@@ -48,12 +48,13 @@ branch, and the completion gate exactly.
 5. Read the task's files before you edit. Implement at the owning seam.
 6. Capture fail-before evidence, then run the task's verification
    commands.
-7. Write the task's proof file. Append an execution log entry with the
-   commit and the test counts.
-8. Set the task terminal with evidence in the ledger row. Commit per the
-   commit convention when the workflow authorizes commits.
-9. Task completion is a checkpoint, not the goal. Continue with the next
-   task until the plan reaches a valid stop state.
+7. Commit the work when the workflow authorizes commits.
+8. Write the task's proof file. Append an execution log entry with the
+   work commit and the test counts.
+9. Set the task terminal with evidence in the ledger row. Commit the
+   plan update per the commit convention.
+10. Task completion is a checkpoint, not the goal. Continue with the
+    next task until the plan reaches a valid stop state.
 
 When a verification fails, capture the exact failure in the proof file.
 Reduce it to a focused command, and fix the root cause at the owning seam.
@@ -62,15 +63,17 @@ you continue.
 
 ## Commit convention
 
-Commit the ledger in the same commit as the transition it records, with a
-subject that encodes the transition and the next active task:
+Record each ledger transition as its own plan commit, right after the
+work commit it records. The subject encodes the transition and the next
+active task:
 
 ```text
 plan: <ID> done (PR #N); <NEXT> in_progress
 ```
 
-This makes `git log` a readable execution timeline and a resume marker
-that survives any context loss.
+A separate plan commit can cite the work commit and pull request it
+records. It also makes `git log` a readable execution timeline and a
+resume marker that survives any context loss.
 
 ## Discoveries and scope
 

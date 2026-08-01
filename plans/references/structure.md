@@ -135,7 +135,7 @@ The status ledger is a table with columns `ID | Task | Status | Evidence`.
 
 The execution log is an append-only table with columns
 `Date | Item | Action | Evidence`. It records dated actions with the
-completing commit and test counts. It also records doc-only work such as a
+work commit and test counts. It also records doc-only work such as a
 re-scope or a dependency refresh, which produces no code commit. The ledger
 answers "where are we". The log answers "what happened".
 
