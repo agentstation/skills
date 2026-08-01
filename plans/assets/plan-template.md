@@ -99,9 +99,10 @@ state. Resume from the status ledger, the execution log, and git state.
 If compaction happens, continue from the plan and git state rather than
 restarting. Loop: keep one task in_progress, implement at the owning
 seam, capture fail-before evidence, run the verification commands,
-commit the work, write the proof file, append the execution log with the
-work commit, mark the task terminal with evidence, commit the plan
-update, then advance to the next task. Decide rather than ask. Mark a
+commit the work per the commit policy, write the proof file, append the
+execution log with the work commit, mark the task terminal with
+evidence, commit the plan update the same way, then advance to the next
+task. Decide rather than ask. Mark a
 wrong or already-satisfied task no-action with a one-line reason. Record
 a blocker and continue with the next eligible task. Binding constraints:
 [invariants and non-goals]. Commit policy: [commit policy]. Stop only at

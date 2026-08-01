@@ -23,9 +23,10 @@ state. Resume from the status ledger, the execution log, and git state.
 If compaction happens, continue from the plan and git state rather than
 restarting. Loop: keep one task in_progress, implement at the owning
 seam, capture fail-before evidence, run the verification commands,
-commit the work, write the proof file, append the execution log with the
-work commit, mark the task terminal with evidence, commit the plan
-update, then advance to the next task. Decide rather than ask. Mark a
+commit the work per the commit policy, write the proof file, append the
+execution log with the work commit, mark the task terminal with
+evidence, commit the plan update the same way, then advance to the next
+task. Decide rather than ask. Mark a
 wrong or already-satisfied task no-action with a one-line reason. Record
 a blocker and continue with the next eligible task. Binding constraints:
 <invariants and non-goals>. Commit policy: <commit policy>. Stop only at
@@ -49,7 +50,7 @@ branch, and the completion gate exactly.
 5. Read the task's files before you edit. Implement at the owning seam.
 6. Capture fail-before evidence, then run the task's verification
    commands.
-7. Commit the work when the workflow authorizes commits.
+7. Commit the work per the commit policy in the goal block.
 8. Write the task's proof file. Append an execution log entry with the
    work commit and the test counts.
 9. Set the task terminal with evidence in the ledger row. Commit the
@@ -75,6 +76,10 @@ plan: <ID> done (PR #N); <NEXT> in_progress
 A separate plan commit can cite the work commit and pull request it
 records. It also makes `git log` a readable execution timeline and a
 resume marker that survives any context loss.
+
+Both commits follow the goal block's commit policy. When the policy
+withholds commits, keep the plan edits in the worktree and cite the
+verification counts as evidence.
 
 ## Discoveries and scope
 
