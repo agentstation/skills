@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan title</title>
+<style>
+  :root {
+    --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
+    --page: #ffffff; --accent: #2563eb;
+    --todo: #6b7280; --in-progress: #2563eb; --blocked: #dc2626;
+    --deferred: #7c3aed; --done: #16a34a; --no-action: #64748b;
+    --rejected: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e5e9ee; --muted: #9aa4af; --line: #333a43; --soft: #1b2027;
+      --page: #11151a; --accent: #60a5fa;
+      --todo: #9aa4af; --in-progress: #60a5fa; --blocked: #f87171;
+      --deferred: #a78bfa; --done: #4ade80; --no-action: #94a3b8;
+      --rejected: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 1080px;
+    background: var(--page); color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      sans-serif;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; border-bottom: 1px solid
+    var(--line); padding-bottom: 0.25rem; }
+  h3 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+  code { background: var(--soft); border: 1px solid var(--line);
+    border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em; }
+  pre { background: var(--soft); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0.9rem 1rem; overflow-x: auto;
+    line-height: 1.45; }
+  pre code { background: none; border: none; padding: 0; }
+  blockquote { margin: 0.75rem 0; padding: 0.6rem 1rem; border-left: 3px
+    solid var(--accent); background: var(--soft); }
+  table { border-collapse: collapse; width: 100%; margin: 0.75rem 0;
+    font-size: 0.92rem; }
+  th, td { border: 1px solid var(--line); padding: 0.35rem 0.55rem;
+    text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  #status-line { color: var(--muted); font-size: 0.92rem; margin: 0 0 1rem; }
+  .bar { height: 0.75rem; border: 1px solid var(--line); border-radius:
+    999px; overflow: hidden; background: var(--soft); }
+  .bar .fill { height: 100%; width: 0; background: var(--done);
+    transition: width 0.3s; }
+  .counts { color: var(--muted); font-size: 0.92rem; margin: 0.4rem 0 0; }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit,
+    minmax(280px, 1fr)); gap: 1rem; }
+  figure { margin: 0; border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.75rem; background: var(--soft); }
+  figcaption { font-weight: 600; margin-bottom: 0.5rem; }
+  figure svg { max-width: 100%; height: auto; }
+  tr[data-status] td:nth-child(3) code { font-weight: 600; }
+  tr[data-status="todo"] td:nth-child(3) code,
+  tr[data-status^="todo("] td:nth-child(3) code { color: var(--todo); }
+  tr[data-status="in_progress"] td:nth-child(3) code,
+  tr[data-status^="in_progress("] td:nth-child(3) code {
+    color: var(--in-progress); }
+  tr[data-status="blocked"] td:nth-child(3) code,
+  tr[data-status^="blocked("] td:nth-child(3) code {
+    color: var(--blocked); }
+  tr[data-status="deferred"] td:nth-child(3) code,
+  tr[data-status^="deferred("] td:nth-child(3) code {
+    color: var(--deferred); }
+  tr[data-status="done"] td:nth-child(3) code,
+  tr[data-status^="done("] td:nth-child(3) code { color: var(--done); }
+  tr[data-status="no-action"] td:nth-child(3) code,
+  tr[data-status^="no-action("] td:nth-child(3) code {
+    color: var(--no-action); }
+  tr[data-status="rejected"] td:nth-child(3) code,
+  tr[data-status^="rejected("] td:nth-child(3) code {
+    color: var(--rejected); }
+  @page { margin: 0.7in 0.6in; size: letter; }
+  @media print {
+    :root {
+      --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
+      --page: #ffffff; --accent: #2563eb;
+      --todo: #6b7280; --in-progress: #2563eb; --blocked: #dc2626;
+      --deferred: #7c3aed; --done: #16a34a; --no-action: #64748b;
+      --rejected: #b45309;
+    }
+    body { max-width: none; padding: 0; }
+  }
+</style>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var rows = document.querySelectorAll("#ledger tbody tr");
+    var terminal = { "done": 1, "no-action": 1, "rejected": 1 };
+    var total = rows.length, closed = 0, current = "";
+    rows.forEach(function (row) {
+      var raw = row.getAttribute("data-status") || "";
+      var status = raw.split("(")[0].trim();
+      if (terminal[status]) { closed += 1; }
+      if (status === "in_progress" && !current) {
+        current = row.id + " " + row.cells[1].textContent.trim();
+      }
+    });
+    var pct = total ? Math.round((closed / total) * 100) : 0;
+    document.querySelector("#progress .fill").style.width = pct + "%";
+    var text = closed + " of " + total + " tasks terminal (" + pct + "%).";
+    if (current) { text += " In progress: " + current; }
+    document.querySelector("#progress .counts").textContent = text;
+  });
+</script>
+</head>
+<body>
+
+<header id="overview">
+  <h1>Plan title</h1>
+  <p id="status-line">
+    Status: <code data-plan-status="draft">draft</code> ·
+    Owner: this plan ·
+    Created: 2026-01-01 ·
+    Baseline: main @ 0000000 ·
+    Proof root: <code>proof/plan-slug/</code> ·
+    Next action: complete the promotion gate
+  </p>
+
+  <section id="outcome">
+    <h2>Outcome</h2>
+    <blockquote>
+      One quotable paragraph that states the invariant this plan delivers.
+      A reviewer holds the whole plan against it.
+    </blockquote>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <div class="bar"><div class="fill"></div></div>
+    <p class="counts">Progress appears here when the page loads. The status
+      ledger below is the source of truth.</p>
+  </section>
+
+  <section id="architecture">
+    <h2>Architecture</h2>
+    <div class="pair">
+      <figure>
+        <figcaption>Before</figcaption>
+        <svg viewBox="0 0 320 150" role="img" aria-label="Before diagram">
+          <rect x="10" y="10" width="300" height="130" rx="8" fill="none"
+            stroke="currentColor"/>
+          <text x="160" y="80" text-anchor="middle"
+            fill="currentColor">component-a owns policy and transport</text>
+        </svg>
+      </figure>
+      <figure>
+        <figcaption>After</figcaption>
+        <svg viewBox="0 0 320 150" role="img" aria-label="After diagram">
+          <defs>
+            <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4"
+              markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect x="10" y="10" width="140" height="130" rx="8" fill="none"
+            stroke="currentColor"/>
+          <text x="80" y="80" text-anchor="middle"
+            fill="currentColor">component-a</text>
+          <rect x="170" y="10" width="140" height="130" rx="8" fill="none"
+            stroke="currentColor"/>
+          <text x="240" y="70" text-anchor="middle"
+            fill="currentColor">policy seam</text>
+          <text x="240" y="92" text-anchor="middle"
+            fill="currentColor">owns the contract</text>
+          <line x1="150" y1="75" x2="166" y2="75" stroke="currentColor"
+            marker-end="url(#arrow)"/>
+        </svg>
+      </figure>
+    </div>
+    <p>Keep component names identical across both views, so the delta is
+      scannable. Mark the seams the plan creates or repairs.</p>
+  </section>
+</header>
+
+<main>
+  <section id="scope">
+    <h2>Scope</h2>
+    <p><strong>Owns:</strong> the concrete workstream this plan delivers.</p>
+    <p><strong>Does not own:</strong> adjacent work, with the owning plan
+      named for each exclusion.</p>
+    <p><strong>Non-goals:</strong> work this plan refuses, so scope cannot
+      drift into it.</p>
+  </section>
+
+  <section id="promotion-gate">
+    <h2>Promotion gate</h2>
+    <p>Promote this plan to <code>active</code> only when every item
+      holds:</p>
+    <ul>
+      <li>Scope and non-goals are complete.</li>
+      <li>Every task states verifiable acceptance criteria.</li>
+      <li>The baseline commit and the proof root exist.</li>
+      <li>The goal block names real documents, paths, and gates.</li>
+      <li>The owner approves activation.</li>
+    </ul>
+  </section>
+
+  <section id="invariants">
+    <h2>Invariants</h2>
+    <ol>
+      <li>A numbered condition the implementation cannot trade away.</li>
+    </ol>
+  </section>
+
+  <section id="ledger">
+    <h2>Status ledger</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Task</th><th>Status</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr id="AB0" data-status="todo"><td>AB0</td><td>Baseline: pin the baseline commit, create the proof root, author the verifier red, capture fail-before evidence. No production behavior changes.</td><td><code>todo</code></td><td></td></tr>
+        <tr id="AB1" data-status="todo"><td>AB1</td><td>First implementation task.</td><td><code>todo</code></td><td></td></tr>
+        <tr id="AB9" data-status="todo"><td>AB9</td><td>Cleanup after the final pull request merges: delete this plan, its proof root, and its index entry. Archive instead only when the repository keeps an archive.</td><td><code>todo</code></td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="tasks">
+    <h2>Tasks</h2>
+
+    <h3 id="task-AB0">AB0 Baseline</h3>
+    <ul>
+      <li><strong>Problem:</strong> the plan needs a pinned baseline, a red
+        verifier, and fail-before evidence.</li>
+      <li><strong>Owning seam and paths:</strong> this plan and
+        <code>proof/plan-slug/</code>.</li>
+      <li><strong>Steps:</strong> pin the baseline commit, create the proof
+        root, author the verifier red, capture fail-before evidence.</li>
+      <li><strong>Acceptance:</strong> the verifier reports its failing
+        baseline count with no production behavior change.</li>
+      <li><strong>Fail-before:</strong> the verifier reports red before any
+        implementation task.</li>
+      <li><strong>Verification:</strong> run the verifier and record its
+        summary line.</li>
+    </ul>
+
+    <h3 id="task-AB1">AB1 First implementation task</h3>
+    <ul>
+      <li><strong>Problem:</strong> the defect or gap this task closes.</li>
+      <li><strong>Owning seam and paths:</strong> module and files.</li>
+      <li><strong>Steps:</strong> numbered actions.</li>
+      <li><strong>Acceptance:</strong> named tests or measurable state
+        assertions.</li>
+      <li><strong>Fail-before:</strong> the check that must fail before the
+        change.</li>
+      <li><strong>Verification:</strong> exact commands.</li>
+    </ul>
+
+    <h3 id="task-AB9">AB9 Cleanup</h3>
+    <ul>
+      <li><strong>Problem:</strong> a merged plan must not linger as a
+        stale control plane.</li>
+      <li><strong>Owning seam and paths:</strong> this plan file, its proof
+        root, and the plans index.</li>
+      <li><strong>Steps:</strong> confirm the merge of the final pull
+        request, then delete the plan, the proof root, and the index
+        entry.</li>
+      <li><strong>Acceptance:</strong> the repository holds no reference to
+        this plan, or the archive holds the completed plan.</li>
+      <li><strong>Fail-before:</strong> not applicable, because the ledger
+        row records the merge.</li>
+      <li><strong>Verification:</strong> search the repository for the plan
+        slug and confirm the end state.</li>
+    </ul>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <pre><code>Execute this plan to completion. This is a whole-plan goal, not a
+single-task goal. Read the plan fully, then read: [required documents].
+Work in [worktree path] on branch [branch]. Chat history is not progress
+state. Resume from the status ledger, the execution log, and git state.
+If compaction happens, continue from the plan and git state rather than
+restarting. Loop: keep one task in_progress, implement at the owning
+seam, capture fail-before evidence, run the verification commands, write
+the proof file, append the execution log, mark the task terminal with
+evidence, then advance to the next task. Decide rather than ask. Mark a
+wrong or already-satisfied task no-action with a one-line reason. Record
+a blocker and continue with the next eligible task. Binding constraints:
+[invariants and non-goals]. Commit policy: [commit policy]. Stop only at
+a valid stop state from the plans skill. Before you stop, update the
+ledger and the log, and record the next action in the status line. The
+goal is met when [completion gate].</code></pre>
+  </section>
+
+  <section id="execution-log">
+    <h2>Execution log</h2>
+    <!-- Append-only: add rows at the end of this table.
+         This section stays last in the file. -->
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Item</th><th>Action</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2026-01-01</td><td>meta</td><td>authored</td><td>Plan
+          authored. No implementation started by this step.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+</body>
+</html>

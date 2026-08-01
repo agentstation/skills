@@ -6,6 +6,9 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 
 - `autoreview`: isolated, structured second-model review with layered model
   profiles and a substantive-code pre-PR gate.
+- `plans`: durable control-plane implementation plans with status ledgers,
+  verifiable task criteria, goal-driven autonomous execution, and
+  self-cleanup on merge.
 - `technical-writing`: controlled, lintable developer writing for
   agent responses, documentation, prompts, tool descriptions, technical web
   pages, procedures, and other technical prose.
@@ -22,6 +25,13 @@ Install the default writing style for Codex, Claude Code, and Goose:
 npx skills add agentstation/skills --skill technical-writing -g \
   -a codex -a claude-code -a goose -y
 ```
+
+Install the plans skill the same way:
+
+```bash
+npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
+```
+
 Installation makes a skill available but does not make its use unconditional.
 Add this small bootstrap to each harness's persistent user instructions:
 

@@ -120,6 +120,8 @@ scan = [
   "README.md",
   "AGENTS.md",
   "autoreview/**/*.md",
+  "plans/**/*.md",
+  "plans/**/*.html",
   "technical-writing/**/*.md",
 ]
 exclude = [
