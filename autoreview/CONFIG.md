@@ -28,6 +28,13 @@ Manual CLI invocations always run. Other gates run only when their value equals
 the configured cadence. With `substantive_only = true`, automatic gates skip
 when the changed paths contain no source code.
 
+Clean pre-PR reviews use a private 24-hour attestation cache. The cache key
+includes the base commit, exact substantive diff, reviewer settings, priority
+threshold, explicit prompt and dataset content, and helper revision. Changes to
+those inputs require a new model review. Non-substantive proof changes can reuse
+the prior result after secret scanning and prompt validation pass. Set
+`AUTOREVIEW_NO_REVIEW_CACHE=1` or pass `--no-review-cache` to bypass the cache.
+
 ## Profiles
 
 A scored profile chooses the highest-scoring available candidate per harness:
@@ -66,11 +73,14 @@ deepswe_avg_cost_usd = 6.08
 ```
 
 `engine` identifies the review harness. Supported runnable engines are
-`claude`, `codex`, `pi`, `opencode`, and `cursor`. The helper also accepts
-`cursor-agent` as an alias. `model` identifies the model that the harness
-invokes. OpenCode expects a provider-qualified `provider/model` name. Cursor
-accepts model names from the account catalog. The candidate table name is a
-stable ID for the complete reviewer configuration, not another model field.
+`claude`, `codex`, `pi`, `kimi`, `opencode`, and `cursor`. The helper also
+accepts `cursor-agent` as an alias. `model` identifies the model that the
+harness invokes. Kimi accepts a model alias from its configuration. OpenCode
+expects a provider-qualified `provider/model` name. Cursor accepts model names
+from the account catalog.
+
+The candidate table name is a stable ID for the complete reviewer
+configuration, not another model field.
 
 `cost` uses a literal 0–10 scale. The scale derives from DeepSWE's measured
 average task cost at the candidate's configured effort. Zero is free, and 10 is
@@ -82,10 +92,11 @@ score. See
 source data.
 
 The helper's isolation checks govern every supported engine. You can configure
-Codex, Claude, a sufficiently recent Pi CLI, OpenCode, and Cursor Agent as
-automatic candidates. The adapters give OpenCode and Cursor only the frozen
-prompt bundle. They run from empty workspaces. The adapters disable repository,
-filesystem, shell, edit, plugin, MCP, and project-instruction capabilities.
+Codex, Claude, a sufficiently recent Pi CLI, Kimi Code 0.30.0 or newer,
+OpenCode, and Cursor Agent as automatic candidates. The adapters give each
+reviewer only the frozen prompt bundle. They run from empty workspaces. The
+adapters disable repository, filesystem, shell, edit, plugin, MCP, and
+project-instruction capabilities.
 
 Inspect the installed harnesses before choosing a profile:
 
@@ -112,6 +123,9 @@ scored selection never installs software. Pi uses the current
 `@earendil-works/pi-coding-agent` package. The installer rejects the deprecated
 `@mariozechner/pi-coding-agent` package.
 
+Autoreview does not install Kimi Code. Install it separately, then confirm it
+with `autoreview --list-harnesses`.
+
 | harness | canonical installer used |
 | --- | --- |
 | [Codex CLI](https://help.openai.com/en/articles/11096431) | `npm install -g @openai/codex` |
@@ -123,6 +137,7 @@ scored selection never installs software. Pi uses the current
 Explicit model examples:
 
 ```bash
+autoreview --engine kimi --model kimi-k2 --thinking on
 autoreview --engine cursor --model grok-4.5
 autoreview --engine cursor --model glm-5.2
 autoreview --engine cursor --model kimi-k3
