@@ -95,6 +95,11 @@ or docstrings. The linter does not process executable code as prose.
 - HTML uses markup-aware extraction for visible text and comment blocks. It
   protects code, quotation, script, style, and table elements.
 
+A documentation tag line starts its own block, as a list item does. A run of
+`@param`, `@returns`, or `@throws` entries is therefore measured entry by
+entry, not as one sentence. A single entry that passes the sentence limit
+still reports.
+
 An explicitly named source file needs a supported parser. The command exits
 with status `2` instead of processing an unsupported source or structured-data
 file as prose. Pass extracted prose on standard input when no parser exists.

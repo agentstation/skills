@@ -88,6 +88,30 @@ Run `leverage;` now.
         payload = json.loads(result.stdout)
         self.assertEqual(payload["summary"]["diagnostics"], 0)
 
+    def test_lint_strips_an_escaped_brace_type_literal(self) -> None:
+        text = (
+            "`Promise`\\<\\{ `expiration`: `number`; `token`: `Uint8Array`; \\} "
+            "\\| `null`\\>\n"
+        )
+        result = self.run_cli(
+            "lint", "-", "--format", "json", "--mode", "strict", input_text=text
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["diagnostics"], 0)
+
+    def test_lint_reports_a_semicolon_between_escaped_braces_in_prose(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            "--mode",
+            "strict",
+            input_text="Write \\{ and \\} to escape a brace; keep the rest.\n",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["semicolon"])
+
     def test_contraction_rule_does_not_report_possessives(self) -> None:
         result = self.run_cli(
             "lint",
@@ -587,6 +611,48 @@ required = true
             ["restricted_vocabulary", "restricted_vocabulary"],
         )
         self.assertEqual([item["line"] for item in diagnostics], [2, 4])
+
+    def test_documentation_tag_lines_start_their_own_block(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        source = self.project / "handler.ts"
+        source.write_text(
+            "/**\n"
+            " * Sends the payload.\n"
+            " *\n"
+            " * @param target - the device row that receives the payload\n"
+            " * @param payload - the sealed bytes that the caller wants to send\n"
+            " * @returns the identifier of the row that the send created\n"
+            " * @throws when the target device is absent from the account\n"
+            " */\n"
+            "export function send(target: string, payload: string): string {\n"
+            "  return target + payload;\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", str(source), "--format", "json")
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], [])
+
+    def test_a_single_documentation_tag_line_still_reports_a_long_sentence(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        source = self.project / "long.ts"
+        source.write_text(
+            "/**\n"
+            " * Sends the payload.\n"
+            " *\n"
+            " * @param target - the device row that receives the payload, which\n"
+            " * the caller reads from the account before it sends, and which the\n"
+            " * component rejects when the account no longer lists that device\n"
+            " */\n"
+            "export function send(target: string): string {\n"
+            "  return target;\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("lint", str(source), "--format", "json")
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual([item["rule"] for item in diagnostics], ["long_sentence"])
+        self.assertEqual([item["line"] for item in diagnostics], [4])
 
     def test_rust_lifetimes_and_php_hash_comments_use_comment_parsers(self) -> None:
         self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")

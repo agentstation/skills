@@ -36,6 +36,18 @@ The linter adapts the upstream source code under the MIT License. The adapted
 file retains attribution. `LICENSE.upstream` contains the upstream license.
 This repository contains no source prose or ASD-STE100 standard text.
 
+The block scanner diverges from the upstream one. A documentation tag line
+starts its own block, so a `@param` run reads as one entry per line instead of
+one sentence. Upstream measures the whole run as a single sentence, which
+reports every documented parameter list of a normal size as too long.
+
+The code mask diverges from the upstream one. It masks an escaped-brace type
+literal, the form a documentation generator emits for a TypeScript object
+type: `\{ `a`: `number`; `b`: `string`; \}`. The inline mask covers each
+backticked member and leaves the separators, so upstream reports every such
+signature as prose punctuation. The mask needs a backtick inside the braces,
+which keeps an escaped brace pair in ordinary prose visible.
+
 The ASD Simplified Technical English Maintenance Group maintains ASD-STE100.
 
 Issue 9 became an international standard on January 15, 2025. Use the official
