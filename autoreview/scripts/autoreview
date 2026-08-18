@@ -896,6 +896,11 @@ SUBSTANTIVE_CODE_SUFFIXES = {
     ".zig",
     ".zsh",
 }
+# Every entry here names a directory of machine-produced or externally-owned
+# output. "docs" is deliberately absent: documentation directories hold
+# handwritten files, and a path component named "docs" also appears inside real
+# source trees as a route segment. Prose is excluded by suffix instead, because
+# SUBSTANTIVE_CODE_SUFFIXES contains no markup extension.
 NONSUBSTANTIVE_PATH_PARTS = {
     ".changeset",
     ".github",
@@ -903,7 +908,6 @@ NONSUBSTANTIVE_PATH_PARTS = {
     "build",
     "coverage",
     "dist",
-    "docs",
     "generated",
     "node_modules",
     "target",
