@@ -1068,6 +1068,15 @@ def strip_code(text: str) -> str:
     inline = re.compile(r"(?<!`)`+[^`\n]*?`+(?!`)")
     for match in inline.finditer(masked):
         mask_range(chars, match.start(), match.end())
+    # A documentation generator renders a TypeScript object type as escaped
+    # braces around backticked members: \{ `a`: `number`; `b`: `string`; \}.
+    # The inline mask covers each member and leaves the separators between
+    # them, so the type syntax reads as prose punctuation. Mask the whole
+    # literal. The backtick test keeps an escaped brace pair in prose visible.
+    type_literal = re.compile(r"\\\{[^\n]*?\\\}")
+    for match in type_literal.finditer(text):
+        if "`" in match.group(0):
+            mask_range(chars, match.start(), match.end())
     return "".join(chars)
 
 
@@ -1123,6 +1132,7 @@ def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
     """Yield prose blocks without merging adjacent Markdown structures."""
     standalone = re.compile(r"^\s*(?:#{1,6}\s+|\|)")
     quote = re.compile(r"^\s*>\s*")
+    doc_tag = re.compile(r"^\s*@[A-Za-z][A-Za-z0-9-]*(?:\s|$)")
     lines = list(re.finditer(r".*(?:\n|\Z)", text))
     block_start: int | None = None
     block_end = 0
@@ -1136,7 +1146,10 @@ def paragraph_spans(text: str) -> Iterable[tuple[int, int]]:
         line_is_list_item = bool(LIST_ITEM_PATTERN.match(line))
         line_is_standalone = bool(standalone.match(line))
         line_is_quote = bool(quote.match(line))
-        line_starts_block = line_is_list_item or line_is_standalone or line_is_quote
+        line_is_doc_tag = bool(doc_tag.match(line))
+        line_starts_block = (
+            line_is_list_item or line_is_standalone or line_is_quote or line_is_doc_tag
+        )
         if not stripped:
             if block_start is not None:
                 yield block_start, block_end
