@@ -412,6 +412,25 @@ class AutoreviewHardeningTests(unittest.TestCase):
             {"src/review.ts", "migrations/001_add_index.sql"},
         )
 
+    def test_substantive_code_classifier_reads_suffix_not_docs_directory(self) -> None:
+        """Prose is excluded by suffix, so real code under a "docs" path still reviews."""
+        paths = {
+            "docs/design.md",
+            "content/docs/reference/errors.mdx",
+            "src/components/docs/install.tsx",
+            "src/app/docs/[[...slug]]/page.tsx",
+            "docs/plans/proof/audit/verify.mjs",
+        }
+
+        self.assertEqual(
+            self.helper["substantive_code_paths"](paths),
+            {
+                "src/components/docs/install.tsx",
+                "src/app/docs/[[...slug]]/page.tsx",
+                "docs/plans/proof/audit/verify.mjs",
+            },
+        )
+
     def test_trufflehog_missing_binary_has_platform_neutral_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repo = init_repo(Path(tempdir))

@@ -23,3 +23,7 @@ Local divergences to reapply on import:
 - `scripts/autoreview` treats `.astro`, `.cjs`, `.cts`, `.mjs`, and `.mts` as
   substantive code. The `".config." in name` guard still excludes related
   configuration files from automatic code gates.
+- `scripts/autoreview` omits `docs` from `NONSUBSTANTIVE_PATH_PARTS`. A
+  documentation directory holds handwritten files, and a `docs` path component
+  also appears inside real source trees as a route segment. Markup suffixes stay
+  outside `SUBSTANTIVE_CODE_SUFFIXES`, so prose is still excluded.
