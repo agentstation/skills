@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 
-ENGINES = ("codex", "claude", "pi", "opencode", "cursor")
+ENGINES = ("codex", "claude", "pi", "kimi", "opencode", "cursor")
 DEFAULT_ENGINES = ("codex", "claude")
 
 MALICIOUS_INITIAL = """export function uploadPath(name) {
@@ -121,7 +121,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
         epilog=(
             "Default engines: codex, claude. Optional installed engines: "
-            "pi, opencode, cursor."
+            "pi, kimi, opencode, cursor."
         ),
     )
     parser.add_argument("--fixture", choices=("malicious", "benign"), default="malicious")

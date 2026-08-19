@@ -33,6 +33,11 @@ model call when the branch changes only documentation, configuration,
 metadata, generated files, or locks. A dirty worktree fails the gate, because
 a branch review of uncommitted work is incomplete.
 
+A clean pre-PR result stores a private 24-hour attestation outside the
+repository. A later proof or documentation commit reuses that result when the
+substantive diff and review contract have not changed. Secret scanning and prompt
+validation still run. Use `--no-review-cache` to contact the reviewer again.
+
 Other modes run on request:
 
 ```bash
@@ -40,6 +45,11 @@ Other modes run on request:
 "$AUTOREVIEW" --mode branch --base origin/main
 "$AUTOREVIEW" --mode commit --commit HEAD
 ```
+
+Use `--dry-run` to validate bundle construction, prompt limits, the secret
+scanner, temporary paths, engine binaries, and local engine configuration. A
+dry run does not contact a review engine and returns a nonzero status when a
+check fails.
 
 Configuration can move the automatic cadence to an `item`, `task`, `phase`, or
 `step` checkpoint. Run the matching gate at that plan boundary:
@@ -67,12 +77,16 @@ fallback.
 ## Findings
 
 The reviewer returns structured findings at priority `P0` through `P3`. Fix
-every `P0` and `P1` finding, or record the reason to accept it. Raise the
-threshold to see less:
+every reported blocker, or record the reason to accept it. The default is P0.
+Widen the threshold to include lower-priority findings:
 
 ```bash
 "$AUTOREVIEW" --max-priority P1
 ```
+
+The helper sends the threshold to the reviewer and applies the same threshold
+again to the structured result. Use `--max-priority P3` when you explicitly
+want all actionable priorities.
 
 ## Documents
 

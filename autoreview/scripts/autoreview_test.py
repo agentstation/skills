@@ -119,6 +119,112 @@ class AutoreviewPriorityTests(unittest.TestCase):
         self.assertIn("below the requested P0", report["overall_explanation"])
 
 
+class AutoreviewAttestationTests(unittest.TestCase):
+    def git(self, repo: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        return result.stdout.strip()
+
+    def init_repo(self, root: Path) -> Path:
+        repo = root / "repo"
+        repo.mkdir()
+        self.git(repo, "init", "-q")
+        self.git(repo, "config", "user.name", "Autoreview Test")
+        self.git(repo, "config", "user.email", "autoreview@example.invalid")
+        (repo / "app.py").write_text("value = 1\n", encoding="utf-8")
+        (repo / "README.md").write_text("initial\n", encoding="utf-8")
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-q", "-m", "initial")
+        return repo
+
+    def test_no_review_cache_cli_option(self) -> None:
+        with mock.patch.object(
+            sys,
+            "argv",
+            ["autoreview", "--no-review-cache"],
+        ):
+            args = AUTOREVIEW.parse_args()
+        self.assertTrue(args.no_review_cache)
+
+    def test_substantive_digest_ignores_later_documentation_commit(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="autoreview-attestation-test.") as tempdir:
+            repo = self.init_repo(Path(tempdir))
+            base = self.git(repo, "rev-parse", "HEAD")
+            (repo / "app.py").write_text("value = 2\n", encoding="utf-8")
+            self.git(repo, "add", "app.py")
+            self.git(repo, "commit", "-q", "-m", "change code")
+            first = AUTOREVIEW.substantive_branch_diff_digest(
+                repo,
+                base,
+                {"app.py"},
+            )
+
+            (repo / "README.md").write_text("proof\n", encoding="utf-8")
+            self.git(repo, "add", "README.md")
+            self.git(repo, "commit", "-q", "-m", "record proof")
+            after_docs = AUTOREVIEW.substantive_branch_diff_digest(
+                repo,
+                base,
+                {"app.py"},
+            )
+
+            (repo / "app.py").write_text("value = 3\n", encoding="utf-8")
+            self.git(repo, "add", "app.py")
+            self.git(repo, "commit", "-q", "-m", "change code again")
+            after_code = AUTOREVIEW.substantive_branch_diff_digest(
+                repo,
+                base,
+                {"app.py"},
+            )
+
+        self.assertEqual(first, after_docs)
+        self.assertNotEqual(first, after_code)
+
+    def test_clean_attestation_round_trip_uses_external_private_cache(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="autoreview-attestation-test.") as tempdir:
+            root = Path(tempdir)
+            repo = root / "repo"
+            repo.mkdir()
+            cache_home = root / "cache"
+            with mock.patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": str(cache_home)},
+                clear=False,
+            ):
+                self.assertTrue(
+                    AUTOREVIEW.store_clean_review_attestation(repo, "abc123")
+                )
+                self.assertTrue(
+                    AUTOREVIEW.clean_review_attestation_is_current(
+                        repo,
+                        "abc123",
+                    )
+                )
+                directory = AUTOREVIEW.review_attestation_cache_directory(repo)
+                self.assertIsNotNone(directory)
+                assert directory is not None
+                self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+
+    def test_cache_is_disabled_when_cache_root_is_inside_repo(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="autoreview-attestation-test.") as tempdir:
+            repo = Path(tempdir) / "repo"
+            repo.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": str(repo / ".cache")},
+                clear=False,
+            ):
+                self.assertIsNone(
+                    AUTOREVIEW.review_attestation_cache_directory(repo)
+                )
+
+
 class AutoreviewHarnessCapabilityTests(unittest.TestCase):
     def harness_args(self) -> argparse.Namespace:
         return argparse.Namespace(
@@ -448,6 +554,153 @@ class AutoreviewCompatibilityTests(unittest.TestCase):
             (None, {"cursor": "auto"}),
         )
 
+    def test_kimi_bin_cli_option(self) -> None:
+        with mock.patch.object(
+            sys,
+            "argv",
+            ["autoreview", "--kimi-bin", "/tmp/trusted-kimi"],
+        ):
+            args = AUTOREVIEW.parse_args()
+        self.assertEqual(args.kimi_bin, "/tmp/trusted-kimi")
+
+    def test_kimi_reviewer_always_disables_tools(self) -> None:
+        args = AUTOREVIEW.reviewer_test_args(
+            engine="kimi",
+            thinking=["on"],
+        )
+
+        reviewer = AUTOREVIEW.reviewer_args(args)[0]
+
+        self.assertEqual(reviewer.engine, "kimi")
+        self.assertEqual(reviewer.thinking, "on")
+        self.assertFalse(reviewer.tools)
+
+    def test_all_reviewers_includes_kimi(self) -> None:
+        args = AUTOREVIEW.reviewer_test_args(reviewers="all")
+
+        reviewers = AUTOREVIEW.reviewer_args(args)
+
+        self.assertEqual(
+            [reviewer.engine for reviewer in reviewers],
+            ["codex", "claude", "pi", "kimi", "opencode", "cursor"],
+        )
+
+    def test_kimi_isolation_requires_current_cli_contract(self) -> None:
+        args = argparse.Namespace(kimi_bin="kimi")
+        required_flags = " ".join(
+            [
+                "--agent-file",
+                "--skills-dir",
+                "--prompt",
+                "--output-format",
+                "--model",
+            ]
+        )
+
+        def fake_run(command: list[str], *_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            if "--version" in command:
+                return subprocess.CompletedProcess(command, 0, "0.31.1", "")
+            return subprocess.CompletedProcess(command, 0, required_flags, "")
+
+        with tempfile.TemporaryDirectory(prefix="autoreview-kimi-probe-test.") as tmpdir, mock.patch.object(
+            AUTOREVIEW,
+            "resolve_command",
+            return_value="/usr/bin/kimi",
+        ), mock.patch.object(
+            AUTOREVIEW,
+            "safe_engine_env",
+            return_value={},
+        ), mock.patch.object(
+            AUTOREVIEW,
+            "safe_temp_root",
+            return_value=Path(tmpdir),
+        ), mock.patch.object(
+            AUTOREVIEW,
+            "run",
+            side_effect=fake_run,
+        ):
+            self.assertEqual(
+                AUTOREVIEW.ensure_kimi_isolation_supported(args, Path(tmpdir)),
+                "/usr/bin/kimi",
+            )
+
+    def test_kimi_runs_with_empty_tools_skills_and_mcp(self) -> None:
+        args = argparse.Namespace(
+            kimi_bin="kimi",
+            model="kimi-model",
+            stream_engine_output=False,
+            thinking="on",
+        )
+        observed: dict[str, object] = {}
+
+        def fake_run(
+            command: list[str],
+            cwd: Path,
+            **kwargs: object,
+        ) -> subprocess.CompletedProcess[str]:
+            observed["command"] = command
+            observed["cwd"] = cwd
+            observed["env"] = kwargs["env"]
+            env = kwargs["env"]
+            assert isinstance(env, dict)
+            home = Path(str(env["KIMI_CODE_HOME"]))
+            observed["agent"] = (home / "reviewer.md").read_text(encoding="utf-8")
+            observed["config"] = (home / "config.toml").read_text(encoding="utf-8")
+            observed["skills"] = list((home / "skills").iterdir())
+            observed["workspace"] = list(cwd.iterdir())
+            stream = (
+                json.dumps({"role": "meta", "type": "system.version", "version": "0.31.1"})
+                + "\n"
+                + json.dumps({"role": "assistant", "content": json.dumps(FINAL_REPORT)})
+                + "\n"
+            )
+            return subprocess.CompletedProcess(command, 0, stream, "")
+
+        with tempfile.TemporaryDirectory(prefix="autoreview-kimi-run-test.") as tmpdir:
+            repo = Path(tmpdir) / "repo"
+            repo.mkdir()
+            with mock.patch.object(
+                AUTOREVIEW,
+                "ensure_kimi_isolation_supported",
+                return_value="/usr/bin/kimi",
+            ), mock.patch.object(
+                AUTOREVIEW,
+                "load_kimi_review_config",
+                return_value=({"telemetry": False}, None),
+            ), mock.patch.object(
+                AUTOREVIEW,
+                "run_with_heartbeat",
+                side_effect=fake_run,
+            ):
+                output = AUTOREVIEW.run_kimi(args, repo, "review prompt")
+
+        self.assertEqual(json.loads(output), FINAL_REPORT)
+        command = observed["command"]
+        self.assertIsInstance(command, list)
+        assert isinstance(command, list)
+        self.assertEqual(command[command.index("--prompt") + 1], "review prompt")
+        self.assertEqual(command[command.index("--output-format") + 1], "stream-json")
+        self.assertEqual(command[command.index("--model") + 1], "kimi-model")
+        self.assertNotIn("--thinking", command)
+        agent = observed["agent"]
+        self.assertIsInstance(agent, str)
+        assert isinstance(agent, str)
+        self.assertIn("tools: []", agent)
+        self.assertIn("subagents: []", agent)
+        config = observed["config"]
+        self.assertIsInstance(config, str)
+        assert isinstance(config, str)
+        self.assertIn("[thinking]", config)
+        self.assertIn("enabled = true", config)
+        self.assertEqual(observed["skills"], [])
+        self.assertEqual(observed["workspace"], [])
+        env = observed["env"]
+        self.assertIsInstance(env, dict)
+        assert isinstance(env, dict)
+        self.assertEqual(env["KIMI_DISABLE_TELEMETRY"], "1")
+        self.assertEqual(env["KIMI_CODE_NO_AUTO_UPDATE"], "1")
+        self.assertNotEqual(Path(str(env["KIMI_CODE_HOME"])), repo)
+
     def test_codex_config_status_exposes_keys_only(self) -> None:
         args = argparse.Namespace(codex_config=['model_verbosity="low"'])
         self.assertEqual(AUTOREVIEW.codex_config_keys(args), ["model_verbosity"])
@@ -529,7 +782,7 @@ class AutoreviewCompatibilityTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="autoreview-codex-workspace-test.") as tmpdir:
             repo = Path(tmpdir)
-            (repo / ".env").write_text("OPENAI_API_KEY=ignored-secret\n")
+            (repo / ".env").write_text("ignored environment fixture\n")
             with mock.patch.dict(
                 os.environ,
                 {"CODEX_HOME": ""},

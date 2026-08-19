@@ -28,6 +28,13 @@ incomplete.
 If an accepted finding changes code, verify and commit the fix, then rerun the
 gate before publishing the PR.
 
+A clean pre-PR review stores a private attestation for 24 hours. The key covers
+the exact substantive diff, base commit, reviewer contract, threshold, prompt,
+datasets, and helper revision. A later proof or documentation commit reuses the
+attestation when the substantive diff has not changed. Secret scanning and prompt
+validation still run before reuse. Pass `--no-review-cache` to require a fresh
+model review.
+
 ## Configured checkpoints
 
 Global and repository config can move the automatic cadence to `item`, `task`,
@@ -71,21 +78,23 @@ never selected automatically, approved by config or environment defaults, or
 used as a fallback. Built-in Claude policy caps effort at `high`. A config can
 consciously change that cap.
 
-Config can register other supported models and
-harnesses as candidates.
+Config can register other supported models and harnesses as candidates.
 
-The helper also supports OpenCode and Cursor Agent when their CLIs exist:
+The helper also supports Kimi Code, OpenCode, and Cursor Agent when their CLIs
+exist:
 
 ```bash
+"$AUTOREVIEW" --engine kimi --model kimi-k2
 "$AUTOREVIEW" --engine opencode --model opencode/kimi-k3 --thinking max
 "$AUTOREVIEW" --engine cursor --model grok-4.5
 "$AUTOREVIEW" --reviewers cursor:grok-4.5,opencode:opencode/glm-5.2:max
 "$AUTOREVIEW" --list-harnesses
 ```
 
-OpenCode model names use its runtime `provider/model` catalog. Cursor model
-names use the Cursor account catalog, including subscription-hosted models. A
-compatible Pi CLI enables Pi as an explicit or configured candidate.
+Kimi model names use its configured model catalog. OpenCode model names use its
+runtime `provider/model` catalog. Cursor model names use the Cursor account
+catalog, including subscription-hosted models. A compatible Pi CLI enables Pi
+as an explicit or configured candidate.
 
 Desktop applications and headless review harnesses are separate capabilities.
 For example, Cursor Desktop does not satisfy the `cursor-agent` requirement,
@@ -106,6 +115,9 @@ with a machine-readable `harness_unavailable` or `profile_unavailable` marker,
 desktop-versus-CLI diagnosis, canonical installation command, and recovery
 options.
 
+The helper does not install Kimi. Install Kimi Code separately before you
+select it.
+
 Read [`MODEL_SELECTION.md`](MODEL_SELECTION.md) when changing score axes,
 candidate defaults, effort policy, or benchmark inputs.
 
@@ -119,9 +131,10 @@ candidate defaults, effort policy, or benchmark inputs.
 - Stop on a clean helper exit. Add another reviewer only when the selected
   profile requires one.
 
-The reviewer classifies every concrete actionable defect from P0 through P3.
-Deterministic post-processing then applies the requested output threshold. The
-default threshold is P0. Widen it only when requested:
+The default threshold is P0. The helper sends the selected threshold to the
+reviewer and asks it to omit lower-priority findings. Deterministic
+post-processing applies the same threshold as a final guard. Widen the
+threshold only when requested:
 
 ```bash
 "$AUTOREVIEW" --max-priority P1
@@ -147,6 +160,11 @@ review-triggered patch cycles have not converged.
   force-write, and MCP permissions.
 - Pi runs without repository context files, extensions, skills, sessions, or
   tools.
+- Kimi runs from an empty workspace with a staged configuration, no tools or
+  subagents, and an empty skill directory. It requires Kimi Code 0.30.0 or
+  newer.
+- Each engine runs in an owned process group. An interrupt terminates the
+  engine and its child processes.
 - Explicit prompt, dataset, and repository config inputs remain inside the
   reviewed repository unless the user passes a trusted config path.
 - The helper never pushes, commits, or mutates the reviewed repository.

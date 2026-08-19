@@ -96,18 +96,19 @@ The built-in automatic pool uses Opus 5 high, Sol high, Terra max, and Luna max:
 The built-in pool excludes Opus 4.8, Sonnet 5/4.6, GPT-5.5/5.4, Kimi, Grok,
 Muse, Gemini, and GLM. A selected operating point dominates their supplied rows
 on pass rate and cost. Some also lack owner-calibrated intelligence and taste
-values for scored selection. They remain available
-through explicit or layered OpenCode, Cursor Agent, and Pi candidates.
+values for scored selection. They remain available through explicit or layered
+Kimi Code, OpenCode, Cursor Agent, and Pi candidates.
 Policy excludes Anthropic xhigh and max rows regardless of benchmark result.
 
 ## Security-review diversity
 
 Model capability and provider policy are separate axes. For authorized security
-review, add a heterogeneous second layer through Cursor Agent, OpenCode, or Pi.
-Use Grok 4.5, GLM-5.2, or Kimi K3 when available. These combinations help with
-exploit-adjacent code, malware-analysis fixtures, vulnerability reproduction,
-protocol abuse, and red-team tests. An OpenAI- or Anthropic-hosted reviewer may
-refuse, truncate, or redirect this legitimate analysis.
+review, add a heterogeneous second layer through Kimi Code, Cursor Agent,
+OpenCode, or Pi. Use Grok 4.5, GLM-5.2, or Kimi K3 when available. These
+combinations help with exploit-adjacent code, malware-analysis fixtures,
+vulnerability reproduction, protocol abuse, and red-team tests. An OpenAI- or
+Anthropic-hosted reviewer may refuse, truncate, or redirect this legitimate
+analysis.
 
 This is a diversity recommendation, not a claim that weaker safety policy
 automatically produces a better reviewer. Alternative-provider models can have
@@ -119,12 +120,12 @@ high-impact findings with tests or a second model.
 | --- | --- | --- |
 | Grok 4.5 | Cursor Agent, OpenCode, or Pi | Adversarial reasoning, exploit-chain review, and code that triggers conservative provider refusals |
 | GLM-5.2 | Cursor Agent, OpenCode, or Pi | Independent vulnerability analysis and implementation-level review from a different model family |
-| Kimi K3 | Cursor Agent, OpenCode, or Pi | Long-context security review, cross-file attack-surface tracing, and a third-provider tie-breaker |
+| Kimi K3 | Kimi Code, Cursor Agent, OpenCode, or Pi | Long-context security review, cross-file attack-surface tracing, and a third-provider tie-breaker |
 
 These models remain explicit or layered candidates until owner-calibrated
 intelligence, taste, and cost inputs justify scored automatic selection.
-Cursor model names come from the account catalog. OpenCode and Pi use their
-runtime provider/model catalogs.
+Cursor model names come from the account catalog. Kimi Code, OpenCode, and Pi
+use their runtime model catalogs.
 
 Update procedure:
 
