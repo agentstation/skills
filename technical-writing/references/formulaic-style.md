@@ -1,7 +1,8 @@
 # Formulaic style
 
 Use these controls to make technical prose direct, specific, and verifiable.
-The rules prescribe output style.
+The rules prescribe output style. They target dead prose: text that carries the
+facts and no voice.
 
 ## Decision order
 

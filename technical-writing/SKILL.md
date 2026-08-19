@@ -1,6 +1,6 @@
 ---
 name: technical-writing
-description: Use this skill for developer-facing technical writing and communication. Apply it to responses, documentation, READMEs, API text, runbooks, PRs, issues, release notes, errors, prompts, tool descriptions, agent messages, technical web pages, comments, and docstrings. Use developer mode by default and strict mode for procedures, safety text, and tightly controlled errors. Do not apply it to marketing, fiction, or other voice-led prose.
+description: Use this skill before you write or edit developer-facing prose. Artifacts include a response, README, docstring, comment, error message, PR, issue, release notes, runbook, API text, prompt, tool description, technical web page, and agent message. Use it when a request asks to write, rewrite, tighten, shorten, or proofread technical text. Use it when a draft reads like generated filler or AI slop. Do not use it for marketing, fiction, or other voice-led prose.
 ---
 
 # Technical writing
@@ -17,6 +17,11 @@ mark each inference or unknown.
 Start with the answer. Use direct claims instead of assistant scaffolds, stock
 phrases, restricted vocabulary, invented contrasts, or decorative conclusions.
 Report each configured occurrence.
+
+Write dead prose. Dead prose carries the facts and no voice. It has no rhythm,
+emphasis, or persuasion. Each sentence states a fact, an instruction, or a
+condition. Measure a draft by what the reader can verify, not by how the text
+sounds.
 
 ## Workflow
 

@@ -96,6 +96,7 @@ Do not use promotional words as substitutes for evidence. Examples include
 - Separate an observation from an inference or recommendation.
 - Preserve code, commands, identifiers, logs, quotations, and structured data.
 - Start with the information that the technical reader needs first.
+- Write dead prose. Remove rhythm, emphasis, and persuasion from correct text.
 - Do not add a preamble, repeated summary, or empty closing statement.
 - Replace a stock phrase with the specific fact, mechanism, measurement, or
   relationship.
