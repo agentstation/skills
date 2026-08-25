@@ -62,8 +62,18 @@ selection:
 
 - Juzek and Ward, “Why Does ChatGPT Delve So Much? Exploring the Sources of Lexical Overrepresentation in Large Language Models”: https://aclanthology.org/2025.coling-main.426/
 - Kobak et al., “Delving into LLM-assisted writing in biomedical publications through excess vocabulary”: https://arxiv.org/abs/2406.07016
+- Liu et al., “The Rise of Verbal Tics in Large Language Models”: https://arxiv.org/abs/2604.19139
+- Marek Šuppa, “Load-bearing is becoming LLM speak”: https://mareksuppa.com/til/load-bearing/
+- Hacker News discussion, “How to stop Claude from saying load-bearing”: https://news.ycombinator.com/item?id=48905248
 
 Frequency alone does not create a rule. The built-in list also requires a
 controlled-writing rationale, a direct replacement, and low technical
 ambiguity. The linter reports each configured occurrence without a
 document-level vocabulary gate.
+
+The 2026 sources also identify coding-agent phrases that do not appear in the
+older academic prose lists. Community observations are weaker evidence than a
+controlled corpus. The skill includes only forms for which direct technical
+prose can state the hidden condition, boundary, or claim. It leaves standard
+terms such as `quality gate`, `verification pass`, `root cause`, `align`, and
+`robust` available for precise use.

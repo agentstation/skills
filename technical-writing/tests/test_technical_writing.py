@@ -1221,6 +1221,76 @@ allowed = ["ensure"]
         )
         self.assertEqual(json.loads(contextual.stdout)["summary"]["diagnostics"], 0)
 
+    def test_restricted_vocabulary_reports_compounds_with_both_separators(
+        self,
+    ) -> None:
+        self.write_project_config(
+            "[limits]\nparagraph_sentences = 20\nmax_warnings_per_100_words = 100\n"
+        )
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                "The load-bearing declaration remains. "
+                "The load bearing declaration remains. "
+                "The byte-identical output remains. "
+                "The byte identical output remains. "
+                "The seam remains. The seams remain. "
+                "The nuanced result remains."
+            ),
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["restricted_vocabulary"] * 7,
+        )
+        self.assertEqual(
+            [item["message"].rsplit(": ", 1)[1] for item in diagnostics],
+            [
+                "'load-bearing'",
+                "'load bearing'",
+                "'byte-identical'",
+                "'byte identical'",
+                "'seam'",
+                "'seams'",
+                "'nuanced'",
+            ],
+        )
+
+    def test_formulaic_phrase_reports_recent_agent_cliches(self) -> None:
+        self.write_project_config("[limits]\nmax_warnings_per_100_words = 100\n")
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text=(
+                "Worth stating plainly, these values carry the argument. "
+                "The trap is stale state. This is my honest take."
+            ),
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["formulaic_phrase"] * 4,
+        )
+
+    def test_assistant_scaffold_reports_absolute_agreement(self) -> None:
+        result = self.run_cli(
+            "lint",
+            "-",
+            "--format",
+            "json",
+            input_text="You are absolutely right.",
+        )
+        diagnostics = json.loads(result.stdout)["documents"][0]["diagnostics"]
+        self.assertEqual(
+            [item["rule"] for item in diagnostics],
+            ["assistant_scaffold"],
+        )
+
     def test_modes_change_restricted_vocabulary_severity(self) -> None:
         developer = self.run_cli(
             "lint",
