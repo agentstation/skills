@@ -27,6 +27,8 @@ The `formulaic_phrase` rule checks selected phrases in these groups:
   `a significant step forward`.
 - empty framing, such as `at its core` and `when it comes to`.
 - canned context, such as `in today's fast-paced world`.
+- coding-agent cliches, such as `worth stating plainly`, `carry the argument`,
+  `the trap is`, `honest take`, and `center of gravity`.
 
 The linter reports the first occurrence and each later occurrence. Replace the
 phrase with the relevant mechanism, measurement, scope, or causal relationship.
@@ -34,8 +36,8 @@ Delete it when it adds no information.
 
 The `assistant_scaffold` rule reports each canned preamble and closing. Examples
 include `certainly, here is`, `I would be happy to`, `hope this helps`, and
-`let me know if you want`. Start with the answer. End after the last useful
-fact or action.
+`you are absolutely right`. Start with the answer. End after the last useful
+fact or action. Verify a correction instead of adding an agreement preamble.
 
 ## Restricted vocabulary
 
@@ -49,11 +51,21 @@ risk of technical ambiguity:
 - `intricate`, `intricacy`, `profound`, `showcase`, `surpass`, `tapestry`, and
   their listed inflections.
 - `vibrant` and `vibrantly`.
+- `nuanced`.
+- `seam` and `seams` when prose can name the exact boundary or interface.
+- `load-bearing` and `load bearing`.
+- `byte-identical` and `byte identical`.
 
 Replace the word with a precise common term or state the exact fact. Use
 `[restricted_vocabulary].additional` for project-specific restrictions. Use
 `[restricted_vocabulary].exceptions` for exact technical forms that the
 project permits.
+
+For the compound forms, state the contract that the adjective hides. Explain
+why the declaration requires `:=` instead of calling it `load-bearing`. State
+that two outputs contain the same bytes instead of calling them
+`byte-identical`. Name an interface, boundary, or test location instead of
+calling it a `seam`.
 
 Do not place a word in the built-in list when it has a common technical use.
 Handle contextual terms through a precise phrase rule, human review, a project

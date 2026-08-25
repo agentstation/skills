@@ -197,6 +197,13 @@ FORMULAIC_PHRASES = (
     "in an ever-evolving landscape",
     "at the end of the day",
     "a key takeaway is",
+    "worth stating plainly",
+    "carry the argument",
+    "carries the argument",
+    "carried the argument",
+    "the trap is",
+    "honest take",
+    "center of gravity",
 )
 ASSISTANT_SCAFFOLDS = (
     "certainly, here is",
@@ -211,12 +218,19 @@ ASSISTANT_SCAFFOLDS = (
     "if you want, i can",
     "feel free to ask",
     "hope this helps",
+    "you are absolutely right",
+    "you're absolutely right",
+    "you’re absolutely right",
 )
 
 # Each match is a controlled-writing finding. Terms with common technical
 # meanings belong in precise phrase rules, human review, or project config.
 RESTRICTED_VOCABULARY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("boast", re.compile(r"\bboast(?:s|ed|ing)?\b", re.IGNORECASE)),
+    (
+        "byte-identical",
+        re.compile(r"\bbyte(?:[-\s]+)identical\b", re.IGNORECASE),
+    ),
     ("delve", re.compile(r"\bdelv(?:e|es|ed|ing)\b", re.IGNORECASE)),
     ("garner", re.compile(r"\bgarner(?:s|ed|ing)?\b", re.IGNORECASE)),
     ("groundbreaking", re.compile(r"\bgroundbreaking\b", re.IGNORECASE)),
@@ -226,13 +240,19 @@ RESTRICTED_VOCABULARY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     ("meticulous", re.compile(r"\bmeticulous(?:ly)?\b", re.IGNORECASE)),
     ("multifaceted", re.compile(r"\bmultifaceted\b", re.IGNORECASE)),
+    ("nuanced", re.compile(r"\bnuanced\b", re.IGNORECASE)),
     ("paramount", re.compile(r"\bparamount\b", re.IGNORECASE)),
     ("profound", re.compile(r"\bprofound(?:ly)?\b", re.IGNORECASE)),
     ("showcase", re.compile(r"\bshowcas(?:e|es|ed|ing)\b", re.IGNORECASE)),
     ("surpass", re.compile(r"\bsurpass(?:es|ed|ing)?\b", re.IGNORECASE)),
+    ("seam", re.compile(r"\bseams?\b", re.IGNORECASE)),
     ("tapestry", re.compile(r"\btapestr(?:y|ies)\b", re.IGNORECASE)),
     ("transformative", re.compile(r"\btransformative\b", re.IGNORECASE)),
     ("vibrant", re.compile(r"\bvibrant(?:ly)?\b", re.IGNORECASE)),
+    (
+        "load-bearing",
+        re.compile(r"\bload(?:[-\s]+)bearing\b", re.IGNORECASE),
+    ),
 )
 CONTRACTIONS = (
     "ain't",
