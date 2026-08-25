@@ -119,6 +119,7 @@ ignored_candidates = [
 scan = [
   "README.md",
   "AGENTS.md",
+  "ago/**/*.md",
   "autoreview/**/*.md",
   "plans/**/*.md",
   "plans/**/*.html",

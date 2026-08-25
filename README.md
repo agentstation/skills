@@ -6,6 +6,7 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 
 | Skill | What it does | Details |
 |---|---|---|
+| `ago` | Runs and remediates the ago restriction-only Go linter. | [ago/README.md](ago/README.md) |
 | `autoreview` | Runs an isolated second-model code review at a pre-PR gate or a configured checkpoint. | [autoreview/README.md](autoreview/README.md) |
 | `plans` | Keeps a durable plan that owns one outcome, with a status ledger, verifiable task criteria, and autonomous execution. | [plans/README.md](plans/README.md) |
 | `technical-writing` | Applies controlled, lintable writing rules to developer-facing prose. | [technical-writing/README.md](technical-writing/README.md) |
@@ -15,6 +16,7 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 Each skill installs into the shared `~/.agents/skills` directory:
 
 ```bash
+npx skills add agentstation/skills --skill ago -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill technical-writing -g \
