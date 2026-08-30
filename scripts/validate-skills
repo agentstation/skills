@@ -1,46 +1,170 @@
 #!/usr/bin/env python3
-"""Validate each top-level skill directory and its required frontmatter."""
+"""Validate the repository's constrained Agent Skills frontmatter form."""
+
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
+ALLOWED_FIELDS = {
+    "allowed-tools",
+    "compatibility",
+    "description",
+    "license",
+    "metadata",
+    "name",
+}
+MAX_COMPATIBILITY_LENGTH = 500
+MAX_DESCRIPTION_LENGTH = 1024
+MAX_SKILL_LINES = 500
+MAX_SKILL_NAME_LENGTH = 64
+NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+TOP_LEVEL_PATTERN = re.compile(r"^([a-z][a-z-]*):(.*)$")
+METADATA_PATTERN = re.compile(r"^  ([A-Za-z0-9._-]+):(.*)$")
 
-def parse_frontmatter(text: str) -> dict[str, str] | None:
+
+def scalar(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def parse_frontmatter(
+    text: str, skill_md: Path
+) -> tuple[dict[str, str | dict[str, str]] | None, str, list[str]]:
     lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None
-    fields: dict[str, str] = {}
-    for line in lines[1:]:
-        if line.strip() == "---":
-            return fields
-        if ":" in line and not line.startswith(" "):
-            key, _, value = line.partition(":")
-            fields[key.strip()] = value.strip().strip('"').strip("'")
-    return None
+    errors: list[str] = []
+    if not lines or lines[0] != "---":
+        return None, "", [f"{skill_md}: missing opening YAML frontmatter marker"]
+
+    try:
+        closing = lines.index("---", 1)
+    except ValueError:
+        return None, "", [f"{skill_md}: unterminated YAML frontmatter"]
+
+    fields: dict[str, str | dict[str, str]] = {}
+    current_map: dict[str, str] | None = None
+    for number, line in enumerate(lines[1:closing], start=2):
+        if not line or line.lstrip().startswith("#"):
+            continue
+        if "\t" in line:
+            errors.append(f"{skill_md}:{number}: tabs are not allowed in frontmatter")
+            continue
+
+        nested = METADATA_PATTERN.fullmatch(line)
+        if nested:
+            if current_map is None:
+                errors.append(f"{skill_md}:{number}: nested value requires metadata")
+                continue
+            key, value = nested.groups()
+            if key in current_map:
+                errors.append(f"{skill_md}:{number}: duplicate metadata key '{key}'")
+                continue
+            parsed = scalar(value)
+            if not parsed:
+                errors.append(f"{skill_md}:{number}: metadata value must be a string")
+            current_map[key] = parsed
+            continue
+
+        top_level = TOP_LEVEL_PATTERN.fullmatch(line)
+        if not top_level:
+            errors.append(f"{skill_md}:{number}: unsupported YAML frontmatter form")
+            current_map = None
+            continue
+
+        key, value = top_level.groups()
+        if key in fields:
+            errors.append(f"{skill_md}:{number}: duplicate frontmatter field '{key}'")
+            current_map = None
+            continue
+        if key == "metadata":
+            if value.strip():
+                errors.append(f"{skill_md}:{number}: metadata must be a string map")
+            current_map = {}
+            fields[key] = current_map
+            continue
+        current_map = None
+        fields[key] = scalar(value)
+
+    body = "\n".join(lines[closing + 1 :]).strip()
+    return fields, body, errors
+
+
+def validate_skill(skill_md: Path) -> list[str]:
+    text = skill_md.read_text(encoding="utf-8")
+    fields, body, errors = parse_frontmatter(text, skill_md)
+    if fields is None:
+        return errors
+
+    unexpected = sorted(set(fields) - ALLOWED_FIELDS)
+    if unexpected:
+        errors.append(
+            f"{skill_md}: unsupported frontmatter fields: {', '.join(unexpected)}"
+        )
+
+    name = fields.get("name")
+    if not isinstance(name, str) or not name:
+        errors.append(f"{skill_md}: frontmatter requires a non-empty string 'name'")
+    else:
+        if len(name) > MAX_SKILL_NAME_LENGTH:
+            errors.append(
+                f"{skill_md}: name exceeds {MAX_SKILL_NAME_LENGTH} characters"
+            )
+        if not NAME_PATTERN.fullmatch(name):
+            errors.append(
+                f"{skill_md}: name must contain lowercase ASCII letters, numbers, and single hyphens"
+            )
+        if name != skill_md.parent.name:
+            errors.append(
+                f"{skill_md}: name '{name}' does not match directory '{skill_md.parent.name}'"
+            )
+
+    description = fields.get("description")
+    if not isinstance(description, str) or not description:
+        errors.append(
+            f"{skill_md}: frontmatter requires a non-empty string 'description'"
+        )
+    elif len(description) > MAX_DESCRIPTION_LENGTH:
+        errors.append(
+            f"{skill_md}: description exceeds {MAX_DESCRIPTION_LENGTH} characters"
+        )
+
+    compatibility = fields.get("compatibility")
+    if compatibility is not None:
+        if not isinstance(compatibility, str) or not compatibility:
+            errors.append(f"{skill_md}: compatibility must be a non-empty string")
+        elif len(compatibility) > MAX_COMPATIBILITY_LENGTH:
+            errors.append(
+                f"{skill_md}: compatibility exceeds {MAX_COMPATIBILITY_LENGTH} characters"
+            )
+
+    for key in ("license", "allowed-tools"):
+        value = fields.get(key)
+        if value is not None and (not isinstance(value, str) or not value):
+            errors.append(f"{skill_md}: {key} must be a non-empty string")
+
+    metadata = fields.get("metadata")
+    if metadata is not None and not isinstance(metadata, dict):
+        errors.append(f"{skill_md}: metadata must be a string map")
+
+    if not body:
+        errors.append(f"{skill_md}: Markdown instructions must follow frontmatter")
+    if len(text.splitlines()) > MAX_SKILL_LINES:
+        errors.append(f"{skill_md}: SKILL.md exceeds the repository's 500-line limit")
+    return errors
 
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
-    errors: list[str] = []
-    checked = 0
-    for skill_md in sorted(repo_root.glob("*/SKILL.md")):
-        checked += 1
-        fm = parse_frontmatter(skill_md.read_text(encoding="utf-8"))
-        if fm is None:
-            errors.append(f"{skill_md}: missing or unterminated YAML frontmatter")
-            continue
-        for key in ("name", "description"):
-            if not fm.get(key):
-                errors.append(f"{skill_md}: frontmatter missing required '{key}'")
-        expected = skill_md.parent.name
-        if fm.get("name") and fm["name"] != expected:
-            errors.append(f"{skill_md}: name '{fm['name']}' != directory '{expected}'")
+    skill_files = sorted(repo_root.glob("*/SKILL.md"))
+    errors = [error for skill_md in skill_files for error in validate_skill(skill_md)]
     if errors:
-        for err in errors:
-            print(f"FAIL {err}", file=sys.stderr)
+        for error in errors:
+            print(f"FAIL {error}", file=sys.stderr)
         return 1
-    print(f"ok: {checked} skill(s) valid")
+    print(f"ok: {len(skill_files)} skill(s) conform to the Agent Skills specification")
     return 0
 
 

@@ -7,6 +7,7 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 | Skill | What it does | Details |
 |---|---|---|
 | `ago` | Runs and remediates the ago restriction-only Go linter. | [ago/README.md](ago/README.md) |
+| `use-modern-go` | Applies target-version modern Go guidance and active ago policy to Go changes and reviews. | [use-modern-go/README.md](use-modern-go/README.md) |
 | `autoreview` | Runs an isolated second-model code review at a pre-PR gate or a configured checkpoint. | [autoreview/README.md](autoreview/README.md) |
 | `plans` | Keeps a durable plan that owns one outcome, with a status ledger, verifiable task criteria, and autonomous execution. | [plans/README.md](plans/README.md) |
 | `technical-writing` | Applies controlled, lintable writing rules to developer-facing prose. | [technical-writing/README.md](technical-writing/README.md) |
@@ -17,6 +18,8 @@ Each skill installs into the shared `~/.agents/skills` directory:
 
 ```bash
 npx skills add agentstation/skills --skill ago -g -a codex -a claude-code -y
+npx skills add agentstation/skills --skill use-modern-go -g \
+  -a codex -a claude-code -y
 npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill technical-writing -g \
@@ -63,9 +66,9 @@ persistent user-instruction file.
 
 ## Repository layout
 
-The repository uses the Agent Skills `<name>/SKILL.md` layout at its root. The
-`skills` CLI discovers this flat collection and verifies that each frontmatter
-name matches its directory. `SKILL.md` addresses the agent. Each `README.md`
+The repository follows the [Agent Skills specification](https://agentskills.io/specification).
+It uses the `<name>/SKILL.md` layout at its root. The `skills` CLI discovers
+this flat collection. `SKILL.md` addresses the agent. Each `README.md`
 addresses a person. `GLOSSARY.md` holds the approved terms for this
 repository.
 
@@ -75,4 +78,4 @@ Validate every skill after a change:
 ./scripts/validate-skills
 ```
 
-See each skill's `UPSTREAM.md` for derivative provenance.
+See a derivative skill's `UPSTREAM.md` for its provenance.

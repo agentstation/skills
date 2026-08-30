@@ -19,9 +19,11 @@
 | developer mode | The technical-writing mode for developer collaboration and documentation. | developer-mode | Approved | `technical-writing/SKILL.md` |
 | formulaic style | Stock wording or structure that adds rhetoric without adding technical meaning. | | Approved | `technical-writing/references/formulaic-style.md` |
 | finding | One reported violation of an ago rule. | | Approved | `ago/SKILL.md` |
+| Go | The Go programming language and its standard toolchain. | Golang | Approved | `use-modern-go/SKILL.md` |
 | `cursor-agent` | The Cursor command-line executable that autoreview uses as a review harness. | | Approved | `autoreview/CONFIG.md` |
 | markup-aware | Describes extraction that distinguishes visible prose from protected elements and attributes in a markup document. | | Approved | `technical-writing/CONFIG.md` |
 | mechanical conformance | A result that confirms only the deterministic writing rules. | lint compliance | Approved | `technical-writing/references/conformance.md` |
+| Modern Go Guidelines CLI | The version-aware command that lists and explains modern Go forms. | | Approved | `use-modern-go/SKILL.md` |
 | multi-word noun | A noun group that contains more than one word and functions as one noun. | noun cluster | Approved | `technical-writing/references/asd-ste100.md` |
 | MCP | Model Context Protocol, which connects an AI application to external tools and data. | | Approved | `autoreview/SKILL.md` |
 | OpenCode | A coding-agent CLI that autoreview can use as an isolated review harness. | | Approved | `autoreview/SKILL.md` |
