@@ -36,6 +36,11 @@ A directory scan skips vendored, generated, and boilerplate paths, such as
 `node_modules` and `LICENSE`. An explicitly named path always lints. The
 `[files]` table adjusts the list.
 
+Generated-artifact detection recognizes explicit generation notices and common
+documentation generator metadata. It supports Doxygen, Javadoc, JSDoc,
+TypeDoc, rustdoc, Sphinx, MkDocs, and Docutils output. A sentence that only
+discusses generated output does not exclude its file.
+
 ## Commands
 
 | Command | What it does |
