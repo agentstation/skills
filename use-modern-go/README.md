@@ -24,8 +24,10 @@ requires Go 1.25 or automatic toolchain switching. Its first run also needs
 network access and permission to write to a user cache.
 
 The skill does not install ago. It uses `go tool ago` when `go.mod` declares
-the ago module tool. It uses a global command only when repository instructions
-require that command.
+the ago module tool. The pinned version supplies built-in defaults without a
+policy file. The command resolves a custom policy when `.ago.yml` or
+`.ago.yaml` exists. The skill uses a global command only when repository
+instructions require that command.
 
 ## Agent contract
 

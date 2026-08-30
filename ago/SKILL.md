@@ -1,8 +1,8 @@
 ---
 name: ago
-description: Run and remediate the ago restriction-only Go linter. Use when a Go repository declares the ago module tool, contains .ago.yml, reports ago findings, or needs ago adoption.
+description: Run and remediate the ago restriction-only Go linter. Use when a Go repository declares the ago module tool, invokes ago in repository checks, contains an ago policy file, reports ago findings, or needs ago adoption or setup.
 license: MIT OR Apache-2.0
-compatibility: Requires Go 1.25 or later. Adoption changes go.mod and go.sum. A custom policy also adds .ago.yml.
+compatibility: Requires Go 1.25 or later. Resolved-policy JSON metadata requires ago 0.2.0 or later. Adoption changes go.mod and go.sum. A custom policy also adds .ago.yml.
 metadata:
   author: agentstation
 ---
@@ -14,16 +14,19 @@ Use the repository's pinned ago command and resolved rule policy.
 ## Find the contract
 
 1. Read the nearest `AGENTS.md`.
-2. Read the nearest `.ago.yml` or `.ago.yaml` when one exists.
-3. Inspect `go.mod` for this tool directive:
+2. Inspect `go.mod` for this tool directive:
 
    ```text
    tool github.com/agentstation/ago/cmd/ago
    ```
 
+3. Read the nearest `.ago.yml` or `.ago.yaml` when one exists.
 4. Use `go tool ago` when the directive exists.
 5. Use `ago` only when the repository documents a global installation.
 6. Do not install or add ago unless the user requests adoption or setup.
+
+An ago policy file is optional. The pinned version's built-in defaults are the
+resolved policy when no policy file exists.
 
 ## Run the check
 
@@ -33,9 +36,13 @@ Discover the active rule policy before the first repair pass:
 go tool ago -list -format json
 ```
 
-Read `policy.ruleSource`, `policy.configPath`, `policy.tests`, and
-`policy.exclude`. Do not infer a custom policy from the absence of
-`.ago.yml`. The pinned ago version supplies the built-in defaults.
+Use each `rules[].enabled` value as the active restriction set. With ago 0.2.0
+or later, also read `policy.ruleSource`, `policy.configPath`, `policy.tests`,
+and `policy.exclude`. For an earlier version, report that policy source
+metadata is unavailable.
+
+Do not infer that the repository has no policy when `.ago.yml` is absent. The
+pinned ago version supplies the built-in defaults.
 
 Run the complete coding-agent check:
 
