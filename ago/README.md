@@ -5,12 +5,12 @@ This Agent Skill teaches a coding agent to discover, run, and remediate the
 
 The skill separates two workflows:
 
-- Use the pinned tool and existing policy in an adopted repository.
-- Add the pinned tool, starter policy, agent instruction, and CI when the user
-  requests adoption.
+- Use the pinned tool and its resolved built-in or custom policy.
+- Add the pinned tool, agent instruction, and CI when the user requests
+  adoption.
 
 The skill does not enforce policy. The adopting repository owns enforcement
-through `go.mod`, `.ago.yml`, `AGENTS.md`, and CI.
+through `go.mod`, an optional `.ago.yml`, `AGENTS.md`, and CI.
 
 ## Install
 

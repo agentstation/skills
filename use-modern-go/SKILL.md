@@ -1,6 +1,6 @@
 ---
 name: use-modern-go
-description: Use this skill for any task that writes, modifies, reviews, fixes, or refactors Go source, tests, module files, or tooling. Invoke it when the user requests a Go feature, bug fix, migration, performance change, code review, test change, dependency update, or cleanup, even if they do not mention Go style. Do not use it for general Go questions that do not inspect or change a codebase.
+description: Use this skill for any task that writes, modifies, reviews, fixes, or refactors Go source, tests, module files, or tooling. Invoke it when the user requests a Go feature, bug fix, migration, performance change, code review, test change, dependency update, or cleanup, even if they do not mention Go style. Do not invoke it only to read, explain, or answer questions about existing Go code.
 license: Apache-2.0. See LICENSE.upstream for complete terms.
 compatibility: Requires Go 1.25 or automatic toolchain switching. The modern-guidelines wrapper needs network access and writes to a user cache on its first run.
 metadata:
@@ -32,7 +32,7 @@ includes a change.
 ## Read modern Go guidance
 
 Run the bundled [modern-guidelines wrapper](scripts/run-tool.sh) before you
-assess or edit Go code. Resolve `<skill-directory>` to this installed skill's
+review or edit Go code. Resolve `<skill-directory>` to this installed skill's
 directory.
 
 On Linux or macOS, run:
@@ -71,28 +71,37 @@ guidance check.
 
 ## Resolve the ago policy
 
-Before the edit, inspect `go.mod` for this module tool:
+Before a Go code change or review, inspect `go.mod` for this module tool:
 
 ```text
 tool github.com/agentstation/ago/cmd/ago
 ```
 
-Also read the nearest `.ago.yml` or `.ago.yaml`. Use `go tool ago` when the
-module declares the tool. Use a global `ago` command only when repository
-instructions require it.
+Use `go tool ago` when the module declares the tool. Use a global `ago`
+command only when repository instructions require it. Read the nearest
+`.ago.yml` or `.ago.yaml` when one exists.
+
+An ago policy file is optional. The pinned ago version supplies built-in
+defaults when no policy file exists.
 
 Do not install ago or add a policy unless the user requests adoption. If the
 `ago` Agent Skill is available, use its complete remediation workflow.
 
-Discover the resolved policy before you choose a Go form:
+When the repository owns an ago command, discover the resolved policy before
+you choose a Go form:
 
 ```sh
 go tool ago -list -format json
 ```
 
-Read `policy.ruleSource`, `policy.configPath`, `policy.tests`, and
-`policy.exclude`. An active ago restriction takes priority over a modern form.
-For example, do not use expression-based `new` when `no-new-expr` is active.
+Use each `rules[].enabled` value as the active restriction set. With ago 0.2.0
+or later, also read `policy.ruleSource`, `policy.configPath`, `policy.tests`,
+and `policy.exclude`. A `built-in` rule source is a complete policy, not a
+missing policy. A `config` rule source records the selected policy file.
+
+An active ago restriction takes priority over a modern form. For example, do
+not use expression-based `new` when `no-new-expr` is active. Keep a generic
+operation as a package function when `no-generic-methods` is active.
 
 ## Make the change
 
