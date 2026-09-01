@@ -11,6 +11,7 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 | `autoreview` | Runs an isolated second-model code review at a pre-PR gate or a configured checkpoint. | [autoreview/README.md](autoreview/README.md) |
 | `plans` | Keeps a durable plan that owns one outcome, with a status ledger, verifiable task criteria, and autonomous execution. | [plans/README.md](plans/README.md) |
 | `technical-writing` | Applies controlled, lintable writing rules to developer-facing prose. | [technical-writing/README.md](technical-writing/README.md) |
+| `starport` | Operates a self-hosted Starport LLM inference gateway: install, start, catalog questions, and diagnosis. | [starport/README.md](starport/README.md) |
 
 ## Install
 
