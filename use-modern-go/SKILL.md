@@ -69,39 +69,44 @@ If files use different module versions, run `list` once for each version. If
 the command is unavailable, use repository evidence and report the skipped
 guidance check.
 
-## Resolve the ago policy
+## Resolve the goago policy
 
 Before a Go code change or review, inspect `go.mod` for this module tool:
 
 ```text
-tool github.com/agentstation/ago/cmd/ago
+tool github.com/agentstation/goago/cmd/goago
 ```
 
-Use `go tool ago` when the module declares the tool. Use a global `ago`
+Use `go tool goago` when the module declares the tool. Use a global `goago`
 command only when repository instructions require it. Read the nearest
-`.ago.yml` or `.ago.yaml` when one exists.
+`.goago.yml` or `.goago.yaml` when one exists.
 
-An ago policy file is optional. The pinned ago version supplies built-in
+A goago policy file is optional. The pinned goago version supplies built-in
 defaults when no policy file exists.
 
-Do not install ago or add a policy unless the user requests adoption. If the
-`ago` Agent Skill is available, use its complete remediation workflow.
+Do not install goago or add a policy unless the user requests adoption. If the
+`goago` Agent Skill is available, use its complete remediation workflow.
 
-When the repository owns an ago command, discover the resolved policy before
+When the repository owns a goago command, discover the resolved policy before
 you choose a Go form:
 
 ```sh
-go tool ago -list -format json
+go tool goago -list -format json
 ```
 
-Use each `rules[].enabled` value as the active restriction set. With ago 0.2.0
-or later, also read `policy.ruleSource`, `policy.configPath`, `policy.tests`,
-and `policy.exclude`. A `built-in` rule source is a complete policy, not a
+Use each `rules[].enabled` value as the active restriction set. Also read
+`policy.ruleSource`, `policy.configPath`, `policy.tests`, and `policy.exclude`.
+A `built-in` rule source is a complete policy, not a
 missing policy. A `config` rule source records the selected policy file.
 
-An active ago restriction takes priority over a modern form. For example, do
+An active goago restriction takes priority over a modern form. For example, do
 not use expression-based `new` when `no-new-expr` is active. Keep a generic
 operation as a package function when `no-generic-methods` is active.
+
+If the module still pins `github.com/agentstation/ago/cmd/ago`, use `go tool ago`
+until the user requests migration. Read legacy `.ago.yml` and `.ago.yaml`
+policies too. The `goago` skill includes the migration procedure. Versions of
+ago before v0.2.0 do not include the `policy` JSON metadata.
 
 ## Make the change
 
@@ -126,19 +131,19 @@ you skip it.
 2. Run the affected package tests.
 3. Run the repository's complete Go check when the task scope permits it.
 4. Run race or platform checks when the changed behavior depends on them.
-5. Run ago when the repository owns an available command.
+5. Run goago when the repository owns an available command.
 
-Use the same ago command form that supplied the policy:
+Use the same goago command form that supplied the policy:
 
 ```sh
-go tool ago -stale-ignores -format json ./...
+go tool goago -stale-ignores -format json ./...
 ```
 
 Status 0 means the run completed without findings. Status 1 means the run
 found a violation or stale ignore. Status 2 means the run was incomplete.
 Read the JSON `errors` field before you change source after status 2.
 
-Fix source when the selected ago policy reports a finding. Do not weaken the
+Fix source when the selected goago policy reports a finding. Do not weaken the
 policy or add a suppression only to make the check pass.
 
 Report the checks, results, skipped checks, and remaining uncertainty.

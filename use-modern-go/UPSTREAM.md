@@ -15,16 +15,16 @@ license appears in `LICENSE.upstream`.
 
 AgentStation rewrites the skill instructions around a project-selected Go
 form. The local workflow adds repository contract discovery, behavior
-preservation, focused verification, and optional ago policy enforcement.
+preservation, focused verification, and optional goago policy enforcement.
 
 Modern guidance applies inside the target Go version and the active project
 policy. This rule resolves known conflicts. For example, modern guidance can
-recommend expression-based `new`, while an active ago policy can reject it.
+recommend expression-based `new`, while an active goago policy can reject it.
 
 To update this skill:
 
 1. Review a specific upstream commit and pinned CLI version.
 2. Compare the upstream skill, wrapper scripts, CLI behavior, and license.
 3. Update the pinned wrapper files and provenance fields together.
-4. Preserve the project-policy and ago integration rules.
+4. Preserve the project-policy and goago integration rules.
 5. Run `scripts/validate-skills` and the technical-writing linter.
