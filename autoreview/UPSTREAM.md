@@ -27,3 +27,17 @@ Local divergences to reapply on import:
   documentation directory holds handwritten files, and a `docs` path component
   also appears inside real source trees as a route segment. Markup suffixes stay
   outside `SUBSTANTIVE_CODE_SUFFIXES`, so prose is still excluded.
+- Secret scanning recognizes the plain `synthetic` placeholder and simple
+  TypeScript generic annotations. It still scans their initializers.
+- The helper also redacts deleted credential fragments from removed lines in a
+  modified file. It still refuses those fragments in retained text, additions,
+  and extra review inputs.
+- `--max-passes` accepts an explicit budget from 1 through 64. The default is
+  eight. Per-pass bytes, complete-content checks, and isolation do not change.
+- The prompt-boundary test derives its input from the configured byte ceiling.
+- Committed branch and commit reviews decode regular `.json.gz` files before
+  review and secret scanning. Input limits are 8 MiB compressed, 32 MiB decoded,
+  64 MiB formatted, 64 nesting levels, and sixteen files per target. Only one
+  gzip member with no optional header fields is accepted. JSON tokens and key
+  order stay unchanged. Git object IDs and file metadata remain in the diff.
+  Local binary review and other binary formats still fail closed.

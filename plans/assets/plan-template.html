@@ -8,17 +8,19 @@
   :root {
     --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
     --page: #ffffff; --accent: #2563eb;
-    --todo: #6b7280; --in-progress: #2563eb; --blocked: #dc2626;
-    --deferred: #7c3aed; --done: #16a34a; --no-action: #64748b;
-    --rejected: #b45309;
+    --done: #15803d; --on-done: #ffffff;
+    --in-progress: #eab308; --on-in-progress: #1a1e24;
+    --blocked: #dc2626; --on-blocked: #ffffff;
+    --removed: #9ca3af; --on-removed: #1a1e24;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --ink: #e5e9ee; --muted: #9aa4af; --line: #333a43; --soft: #1b2027;
       --page: #11151a; --accent: #60a5fa;
-      --todo: #9aa4af; --in-progress: #60a5fa; --blocked: #f87171;
-      --deferred: #a78bfa; --done: #4ade80; --no-action: #94a3b8;
-      --rejected: #fbbf24;
+      --done: #4ade80; --on-done: #1a1e24;
+      --in-progress: #facc15; --on-in-progress: #1a1e24;
+      --blocked: #f87171; --on-blocked: #1a1e24;
+      --removed: #6b7280; --on-removed: #ffffff;
     }
   }
   * { box-sizing: border-box; }
@@ -46,10 +48,28 @@
     text-align: left; vertical-align: top; }
   th { background: var(--soft); }
   #status-line { color: var(--muted); font-size: 0.92rem; margin: 0 0 1rem; }
-  .bar { height: 0.75rem; border: 1px solid var(--line); border-radius:
-    999px; overflow: hidden; background: var(--soft); }
-  .bar .fill { height: 100%; width: 0; background: var(--done);
-    transition: width 0.3s; }
+  /* Progress bar, left to right: done, in_progress, blocked, todo (the
+     empty track), then deferred, no-action, and rejected. */
+  .bar { display: flex; height: 0.9rem; border: 1px solid var(--muted);
+    border-radius: 999px; overflow: hidden; background: var(--soft); }
+  .bar > span { width: 0; height: 100%; }
+  .bar > span + span { box-shadow: inset 2px 0 0 var(--page); }
+  [data-seg="done"] { --seg: var(--done); }
+  [data-seg="in_progress"] { --seg: var(--in-progress); }
+  [data-seg="blocked"] { --seg: var(--blocked); }
+  [data-seg="todo"] { --seg: transparent; }
+  [data-seg="removed"] { --seg: var(--removed); }
+  .bar > span, .swatch { background-color: var(--seg);
+    print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .bar > [data-seg="blocked"], [data-seg="blocked"] .swatch {
+    background-image: repeating-linear-gradient(135deg, transparent 0 4px,
+      rgb(255 255 255 / 0.45) 4px 6px); }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem;
+    list-style: none; margin: 0.5rem 0 0; padding: 0; font-size: 0.88rem; }
+  .legend li { display: flex; align-items: center; gap: 0.4rem; }
+  .swatch { display: inline-block; width: 0.85rem; height: 0.85rem;
+    border: 1px solid var(--muted); border-radius: 3px; }
+  [data-seg="todo"] .swatch { background-color: var(--soft); }
   .counts { color: var(--muted); font-size: 0.92rem; margin: 0.4rem 0 0; }
   .pair { display: grid; grid-template-columns: repeat(auto-fit,
     minmax(280px, 1fr)); gap: 1rem; }
@@ -57,56 +77,77 @@
     padding: 0.75rem; background: var(--soft); }
   figcaption { font-weight: 600; margin-bottom: 0.5rem; }
   figure svg { max-width: 100%; height: auto; }
+  /* Ledger status tokens use the bar colors. */
   tr[data-status] td:nth-child(3) code { font-weight: 600; }
-  tr[data-status="todo"] td:nth-child(3) code,
-  tr[data-status^="todo("] td:nth-child(3) code { color: var(--todo); }
-  tr[data-status="in_progress"] td:nth-child(3) code,
-  tr[data-status^="in_progress("] td:nth-child(3) code {
-    color: var(--in-progress); }
-  tr[data-status="blocked"] td:nth-child(3) code,
-  tr[data-status^="blocked("] td:nth-child(3) code {
-    color: var(--blocked); }
-  tr[data-status="deferred"] td:nth-child(3) code,
-  tr[data-status^="deferred("] td:nth-child(3) code {
-    color: var(--deferred); }
-  tr[data-status="done"] td:nth-child(3) code,
-  tr[data-status^="done("] td:nth-child(3) code { color: var(--done); }
-  tr[data-status="no-action"] td:nth-child(3) code,
-  tr[data-status^="no-action("] td:nth-child(3) code {
-    color: var(--no-action); }
-  tr[data-status="rejected"] td:nth-child(3) code,
-  tr[data-status^="rejected("] td:nth-child(3) code {
-    color: var(--rejected); }
+  tr[data-status^="done"] td:nth-child(3) code {
+    background: var(--done); color: var(--on-done); border-color: transparent; }
+  tr[data-status^="in_progress"] td:nth-child(3) code {
+    background: var(--in-progress); color: var(--on-in-progress);
+    border-color: transparent; }
+  tr[data-status^="blocked"] td:nth-child(3) code {
+    background: var(--blocked); color: var(--on-blocked);
+    border-color: transparent; }
+  tr[data-status^="deferred"] td:nth-child(3) code,
+  tr[data-status^="no-action"] td:nth-child(3) code,
+  tr[data-status^="rejected"] td:nth-child(3) code {
+    background: var(--removed); color: var(--on-removed);
+    border-color: transparent; }
+  tr[data-status] td:nth-child(3) code {
+    print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   @page { margin: 0.7in 0.6in; size: letter; }
   @media print {
     :root {
       --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
       --page: #ffffff; --accent: #2563eb;
-      --todo: #6b7280; --in-progress: #2563eb; --blocked: #dc2626;
-      --deferred: #7c3aed; --done: #16a34a; --no-action: #64748b;
-      --rejected: #b45309;
+      --done: #15803d; --on-done: #ffffff;
+      --in-progress: #eab308; --on-in-progress: #1a1e24;
+      --blocked: #dc2626; --on-blocked: #ffffff;
+      --removed: #9ca3af; --on-removed: #1a1e24;
     }
     body { max-width: none; padding: 0; }
   }
 </style>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    var rows = document.querySelectorAll("#ledger tbody tr");
+    // Each bare task status maps to one bar segment.
+    var segmentOf = { "done": "done", "in_progress": "in_progress",
+      "blocked": "blocked", "todo": "todo", "deferred": "removed",
+      "no-action": "removed", "rejected": "removed" };
     var terminal = { "done": 1, "no-action": 1, "rejected": 1 };
-    var total = rows.length, closed = 0, current = "";
+    var names = { "done": "Done", "in_progress": "In progress",
+      "blocked": "Blocked", "todo": "To do",
+      "removed": "Deferred, no-action, or rejected" };
+    var counts = { "done": 0, "in_progress": 0, "blocked": 0, "todo": 0,
+      "removed": 0 };
+    var rows = document.querySelectorAll("#ledger tbody tr[data-status]");
+    var total = rows.length, closed = 0, running = [], unknown = [];
     rows.forEach(function (row) {
-      var raw = row.getAttribute("data-status") || "";
-      var status = raw.split("(")[0].trim();
+      var status = row.getAttribute("data-status").split("(")[0].trim();
+      if (!segmentOf[status]) { unknown.push(row.id); status = "todo"; }
+      counts[segmentOf[status]] += 1;
       if (terminal[status]) { closed += 1; }
-      if (status === "in_progress" && !current) {
-        current = row.id + " " + row.cells[1].textContent.trim();
-      }
+      if (status === "in_progress") { running.push(row.id); }
+    });
+    var progress = document.getElementById("progress");
+    var summary = [];
+    progress.querySelectorAll(".bar > [data-seg]").forEach(function (seg) {
+      var key = seg.getAttribute("data-seg"), n = counts[key];
+      seg.style.width = total ? (n / total) * 100 + "%" : "0";
+      seg.title = names[key] + ": " + n;
+      summary.push(names[key] + " " + n);
+    });
+    progress.querySelectorAll(".legend [data-seg]").forEach(function (item) {
+      item.querySelector("b").textContent = counts[item.getAttribute("data-seg")];
     });
     var pct = total ? Math.round((closed / total) * 100) : 0;
-    document.querySelector("#progress .fill").style.width = pct + "%";
     var text = closed + " of " + total + " tasks terminal (" + pct + "%).";
-    if (current) { text += " In progress: " + current; }
-    document.querySelector("#progress .counts").textContent = text;
+    if (running.length) { text += " In progress: " + running.join(", ") + "."; }
+    if (unknown.length) {
+      text += " Unknown status, counted as to do: " + unknown.join(", ") + ".";
+    }
+    progress.querySelector(".bar").setAttribute("aria-label",
+      text + " " + summary.join(", ") + ".");
+    progress.querySelector(".counts").textContent = text;
   });
 </script>
 </head>
@@ -120,8 +161,25 @@
     Created: 2026-01-01 ·
     Baseline: main @ 0000000 ·
     Proof root: <code>proof/plan-slug/</code> ·
-    Next action: complete the promotion gate
+    Next action: see <a href="#current-resume-state">Current resume state</a>
   </p>
+
+  <section id="current-resume-state">
+    <h2>Current resume state</h2>
+    <p>Updated: 2026-01-01 UTC.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Current state</th></tr></thead>
+      <tbody>
+        <tr><td>In progress</td><td>None. This plan is a draft. [Per task: ID link, owner]</td></tr>
+        <tr><td>Next action</td><td>Complete the promotion gate.</td></tr>
+        <tr><td>Worktree</td><td>[Per in-progress task: path, branch, HEAD, dirty-file inventory or clean]</td></tr>
+        <tr><td>Verification</td><td>None. No implementation started.</td></tr>
+        <tr><td>Running processes</td><td>None.</td></tr>
+        <tr><td>Required reads</td><td>[in-progress task contracts and relevant current proof]</td></tr>
+        <tr><td>Unresolved</td><td>[decision or blocker, or none]</td></tr>
+      </tbody>
+    </table>
+  </section>
 
   <section id="outcome">
     <h2>Outcome</h2>
@@ -133,7 +191,16 @@
 
   <section id="progress">
     <h2>Progress</h2>
-    <div class="bar"><div class="fill"></div></div>
+    <div class="bar" role="img" aria-label="Progress appears when the page loads.">
+      <span data-seg="done"></span><span data-seg="in_progress"></span><span data-seg="blocked"></span><span data-seg="todo"></span><span data-seg="removed"></span>
+    </div>
+    <ul class="legend">
+      <li data-seg="done"><span class="swatch" aria-hidden="true"></span>Done <b></b></li>
+      <li data-seg="in_progress"><span class="swatch" aria-hidden="true"></span>In progress <b></b></li>
+      <li data-seg="blocked"><span class="swatch" aria-hidden="true"></span>Blocked <b></b></li>
+      <li data-seg="todo"><span class="swatch" aria-hidden="true"></span>To do <b></b></li>
+      <li data-seg="removed"><span class="swatch" aria-hidden="true"></span>Deferred, no-action, or rejected <b></b></li>
+    </ul>
     <p class="counts">Progress appears here when the page loads. The status
       ledger below is the source of truth.</p>
   </section>
@@ -275,27 +342,35 @@
   <section id="goal">
     <h2>Goal</h2>
     <pre><code>Execute this plan to completion. This is a whole-plan goal, not a
-single-task goal. Read the plan fully, then read: [required documents].
-Work in [worktree path] on branch [branch]. Chat history is not progress
-state. Resume from the status ledger, the execution log, and git state.
+single-task goal. Read the compact plan fully, then the in-progress task
+contracts and relevant current proof. Required reference owners:
+[documents by scope]. Work in [worktree path] on branch [branch]. Chat history
+is not progress state. Resume from Current resume state, the ledger, and
+verified git state.
+Read history only for a named evidence question.
 If compaction happens, continue from the plan and git state rather than
-restarting. Loop: keep one task in_progress, implement at the owning
-seam, capture fail-before evidence, run the verification commands,
+restarting. Loop: run independent tasks in parallel. Mark each running task
+in_progress with its named owner and its own worktree and branch. A task
+starts only when its dependencies are terminal. For each task, implement at
+the owning seam, capture fail-before evidence, run the verification commands,
 commit the work per the commit policy, write the proof file, append the
 execution log with the work commit, mark the task terminal with
-evidence, commit the plan update the same way, then advance to the next
+evidence, commit the plan update the same way, then start the next eligible
 task. Decide rather than ask. Mark a
 wrong or already-satisfied task no-action with a one-line reason. Record
 a blocker and continue with the next eligible task. Binding constraints:
 [invariants and non-goals]. Commit policy: [commit policy]. Stop only at
 a valid stop state from the plans skill. Before you stop, update the
-ledger and the log, and record the next action in the status line. The
+ledger and the log, and replace Current resume state. The status line links
+to its exact next action. The
 goal is met when [completion gate].</code></pre>
   </section>
 
   <section id="execution-log">
     <h2>Execution log</h2>
-    <!-- Append-only: add rows at the end of this table.
+    <p>History: none. Move older rows unchanged to the proof root when the
+      context budget requires it. Keep a link here.</p>
+    <!-- Append short rows at the end of this table.
          This section stays last in the file. -->
     <table>
       <thead>

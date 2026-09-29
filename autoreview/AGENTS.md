@@ -11,7 +11,7 @@
   fallback.
 - Reserve Fable for manually requested review of architecture-sensitive or
   exceptionally complex changes.
-- Keep Opus 5 high as the default Claude-side code reviewer.
+- Keep Opus 5.5 high as the default Claude-side code reviewer.
 - Keep built-in Claude effort at or below `high`.
 - Require conscious configuration for higher caps.
 - Keep the default automatic cadence at the substantive-code pre-PR gate.

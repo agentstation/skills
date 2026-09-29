@@ -367,6 +367,29 @@ class AutoreviewHarnessCapabilityTests(unittest.TestCase):
 
 
 class AutoreviewSecretScannerTests(unittest.TestCase):
+    def test_generic_type_annotation_scans_only_its_initializer(self) -> None:
+        declaration = "const credentials: DurableObjectStub<CredentialStore> = "
+        safe = declaration + "env.CREDENTIAL_STATE.getByName(scope);"
+        self.assertFalse(
+            AUTOREVIEW.secret_text_risk(safe, javascript_dialect="typescript")
+        )
+        self.assertEqual(
+            AUTOREVIEW.review_secret_fragments(safe, javascript_dialect="typescript"),
+            set(),
+        )
+        value = "actual-production-" + "secret"
+        unsafe = declaration + f'"{value}";'
+        self.assertTrue(
+            AUTOREVIEW.secret_text_risk(unsafe, javascript_dialect="typescript")
+        )
+        self.assertEqual(
+            AUTOREVIEW.review_secret_fragments(unsafe, javascript_dialect="typescript"),
+            {value},
+        )
+        self.assertTrue(
+            AUTOREVIEW.secret_text_risk(safe, javascript_dialect="javascript")
+        )
+
     def test_typescript_type_annotations_are_not_credential_material(self) -> None:
         source = "\n".join(
             (

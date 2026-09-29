@@ -48,7 +48,7 @@ after it has scope, a ledger, verification obligations, and a goal block.
 | Status | Meaning |
 |---|---|
 | `todo` | Eligible and not started. |
-| `in_progress` | Under active work now. |
+| `in_progress` | Under active work now by a named owner. Several tasks can be `in_progress` at the same time. |
 | `blocked(<reason>)` | Stopped on a recorded blocker. |
 | `deferred(<decision>)` | Parked by an explicit owner decision. |
 | `done` | Complete, with evidence in the ledger row. |
@@ -71,31 +71,57 @@ Next action: <the exact next step>
 
 In a Markdown plan the status line fills the first lines of the file. In
 an HTML plan it is the first content in the overview. A cold agent reads
-it first. `Next action` is the durable resume pointer. Update it at every
-task transition and before every stop.
+it first. `Next action` links to the exact next step in Current resume state.
+Update that record at every task transition and before every stop.
 
 ## Required sections
 
 An `active` plan contains these sections, in this order:
 
 1. Status line.
-2. Outcome: one quotable paragraph that states the invariant the plan
+2. Current resume state: the record defined below.
+3. Outcome: one quotable paragraph that states the invariant the plan
    delivers. A reviewer holds the whole plan against it.
-3. Progress, in an HTML plan only: the bar and counts that the ledger
+4. Progress, in an HTML plan only: the bar and counts that the ledger
    drives.
-4. Architecture: before and after diagrams when the plan changes structure.
-5. Scope: what the plan owns, what it does not own with the owning plan
+5. Architecture: before and after diagrams when the plan changes structure.
+6. Scope: what the plan owns, what it does not own with the owning plan
    named, and explicit non-goals.
-6. Status ledger.
-7. Tasks: one block per task, in the task template below.
-8. Goal: the paste-ready block defined in
+7. Status ledger.
+8. Tasks: one block per task, in the task template below.
+9. Goal: the paste-ready block defined in
    [`execution.md`](execution.md).
-9. Execution log, last, so a log append edits the end of the document
+10. Execution log, last, so a log append edits the end of the document
    instead of its middle.
 
 Optional sections slot between Scope and the status ledger. A `draft`
 plan needs only the status line, scope, a promotion gate, a draft ledger,
 and an execution log.
+
+## Current resume state
+
+Keep one current record inside the plan. Replace obsolete values in place.
+Execution entries retain dated evidence. They do not own current instructions.
+The ledger owns task status. The resume record links to each `in_progress` row.
+
+Record:
+
+- Updated time, and a link to each `in_progress` task with its owner.
+- Exact next action and required task-contract links.
+- Worktree, branch, HEAD, and task-owned dirty-file inventory of each
+  `in_progress` task.
+- Latest relevant checks, their tested source, and checks still required.
+- Running commands or tool sessions, with safe result paths, or `none`.
+- Blocker, unresolved decision, or partial change that affects the next action.
+
+Link detailed inventories and reports instead of copying them. Record no
+credentials or sensitive external identifiers. A changed worktree can make a
+previous pass historical without invalidating what that test proved.
+
+The goal block defines execution policy. The resume record defines current
+execution state. An index or handoff links to this record instead of keeping
+another current copy. Reconcile a conflict with git state and evidence before
+acting. Follow higher-priority instructions when they change the plan.
 
 ## Task template
 
@@ -114,6 +140,9 @@ Write acceptance as falsifiable state assertions. Name literal test
 functions where they exist. One task is one pull request unless its row
 permits a mechanical split.
 
+A task block may link to its complete contract in the proof root. State
+that the linked acceptance criteria remain part of the completion gate.
+
 The final task of every plan is cleanup. Its trigger is the merge of the
 plan's final pull request. [`execution.md`](execution.md) defines the
 cleanup procedure.
@@ -129,15 +158,21 @@ The status ledger is a table with columns `ID | Task | Status | Evidence`.
   number, with dotted subtasks. Never renumber.
 - Keep one row per task and one line per row, so rebases cannot lose rows
   silently.
+- The evidence cell of an `in_progress` row names its owner (an agent or a
+  session) and its worktree or branch.
 - Record what execution found that planning missed in the evidence cell.
 
 ## Execution log rules
 
-The execution log is an append-only table with columns
+The execution history is append-only, with columns
 `Date | Item | Action | Evidence`. It records dated actions with the
 work commit and test counts. It also records doc-only work such as a
 re-scope or a dependency refresh, which produces no code commit. The ledger
 answers "where are we". The log answers "what happened".
+
+The plan retains recent entries. Move older entries unchanged to linked
+history under the proof root through the [compaction procedure](context-budget.md).
+Moving entries does not permit rewriting or discarding them.
 
 ## Evidence rules
 
@@ -148,6 +183,8 @@ answers "where are we". The log answers "what happened".
 - Keep rejected and inconclusive runs in the proof root. They prove the
   method.
 - For a measurement, split the raw data file from the verdict file.
+- Bind a result to its tested commit or dirty-source inventory. Identify
+  checks that ran before later edits or during source changes.
 
 ## Proof root
 
@@ -161,10 +198,9 @@ the check roster.
 
 Keep the plan a thin control plane and the proof root thick.
 
-- Keep the status line, outcome, progress, and ledger in the first 120
-  lines.
-- Keep the plan under about 500 lines. Move narrative evidence to the proof
-  root.
+- Put current state and the ledger before detailed task content. In HTML,
+  source lines for styles and scripts do not count as visible content.
+- Use the [context budgets](context-budget.md), not line count alone.
 - Split the plan when a phase grows into its own outcome. An oversized plan
   cannot be re-read at resume, which defeats the ledger.
 

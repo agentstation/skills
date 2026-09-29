@@ -3,7 +3,20 @@
 Status: `draft` | Owner: this plan | Created: 2026-01-01
 Baseline: main @ 0000000
 Proof root: `proof/plan-slug/`
-Next action: complete the promotion gate
+Next action: see [Current resume state](#current-resume-state)
+
+## Current resume state
+
+Updated: 2026-01-01 UTC.
+
+- In progress: none. This plan is a draft. [Per task: ID link, owner.]
+- Next action: complete the promotion gate.
+- Worktree: [per in-progress task: path, branch, HEAD, dirty-file inventory
+  or clean].
+- Verification: none. No implementation started.
+- Running processes: none.
+- Required reads: [in-progress task contracts and relevant current proof].
+- Unresolved: [decision or blocker, or none].
 
 ## Outcome
 
@@ -93,27 +106,35 @@ Promote this plan to `active` only when every item holds:
 
 ```text
 Execute this plan to completion. This is a whole-plan goal, not a
-single-task goal. Read the plan fully, then read: [required documents].
-Work in [worktree path] on branch [branch]. Chat history is not progress
-state. Resume from the status ledger, the execution log, and git state.
+single-task goal. Read the compact plan fully, then the in-progress task
+contracts and relevant current proof. Required reference owners:
+[documents by scope]. Work in [worktree path] on branch [branch]. Chat history
+is not progress state. Resume from Current resume state, the ledger, and
+verified git state.
+Read history only for a named evidence question.
 If compaction happens, continue from the plan and git state rather than
-restarting. Loop: keep one task in_progress, implement at the owning
-seam, capture fail-before evidence, run the verification commands,
+restarting. Loop: run independent tasks in parallel. Mark each running task
+in_progress with its named owner and its own worktree and branch. A task
+starts only when its dependencies are terminal. For each task, implement at
+the owning seam, capture fail-before evidence, run the verification commands,
 commit the work per the commit policy, write the proof file, append the
 execution log with the work commit, mark the task terminal with
-evidence, commit the plan update the same way, then advance to the next
+evidence, commit the plan update the same way, then start the next eligible
 task. Decide rather than ask. Mark a
 wrong or already-satisfied task no-action with a one-line reason. Record
 a blocker and continue with the next eligible task. Binding constraints:
 [invariants and non-goals]. Commit policy: [commit policy]. Stop only at
 a valid stop state from the plans skill. Before you stop, update the
-ledger and the log, and record the next action in the status line. The
+ledger and the log, and replace Current resume state. The status line links
+to its exact next action. The
 goal is met when [completion gate].
 ```
 
 ## Execution log
 
-Append rows at the end. This section stays last.
+Append short rows at the end. This section stays last.
+History: none. Move older rows unchanged to the proof root when the context
+budget requires it. Keep a link here.
 
 | Date | Item | Action | Evidence |
 |---|---|---|---|

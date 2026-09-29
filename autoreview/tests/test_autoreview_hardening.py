@@ -174,7 +174,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
         self.assertEqual(budget[0][0], "luna")
         self.assertEqual(budget[0][1]["effort"], "max")
         self.assertEqual(budget[0][1]["deepswe_pass_rate"], 67)
-        self.assertEqual(budget[0][1]["deepswe_avg_cost_usd"], 0.61)
+        self.assertEqual(budget[0][1]["model"], "gpt-6-luna")
+        self.assertEqual(budget[0][1]["deepswe_avg_cost_usd"], 0.23)
 
     def test_builtin_pool_excludes_dominated_models_and_caps_anthropic(self) -> None:
         candidates = self.helper["BUILTIN_REVIEW_CONFIG"]["candidates"]
@@ -182,13 +183,13 @@ class AutoreviewHardeningTests(unittest.TestCase):
         self.assertNotIn("opus48", candidates)
         self.assertNotIn("sonnet5", candidates)
         self.assertEqual(candidates["fable5"]["intelligence"], 10)
-        self.assertEqual(candidates["sol"]["intelligence"], 8.5)
-        self.assertEqual(candidates["opus5"]["intelligence"], 8)
-        self.assertEqual(candidates["fable5"]["taste"], 9)
-        self.assertEqual(candidates["sol"]["taste"], 8)
-        self.assertEqual(candidates["opus5"]["taste"], 8.5)
-        self.assertEqual(candidates["terra"]["taste"], 7)
-        self.assertEqual(candidates["luna"]["taste"], 6)
+        self.assertEqual(candidates["sol"]["intelligence"], 7.5)
+        self.assertEqual(candidates["opus5"]["intelligence"], 9.0)
+        self.assertEqual(candidates["fable5"]["taste"], 10.0)
+        self.assertEqual(candidates["sol"]["taste"], 7.0)
+        self.assertEqual(candidates["opus5"]["taste"], 9)
+        self.assertEqual(candidates["terra"]["taste"], 6.5)
+        self.assertEqual(candidates["luna"]["taste"], 5.5)
         for candidate in candidates.values():
             if candidate["engine"] == "claude":
                 self.assertNotIn(candidate["effort"], {"xhigh", "max"})
@@ -1844,16 +1845,32 @@ class AutoreviewHardeningTests(unittest.TestCase):
     def test_large_bundle_stays_single_pass_until_prompt_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repo = init_repo(Path(tempdir))
+            header = "# Commit Diff\n"
+            empty_prompt = self.helper["build_review_prompts"](
+                repo, "commit", "HEAD", header, "", ""
+            )[0]
+            line = "safe review content\n"
+            available = (
+                self.helper["MAX_REVIEW_PROMPT_BYTES"]
+                - len(empty_prompt.encode("utf-8"))
+            )
+            repetitions = available // len(line.encode("utf-8"))
             prompts = self.helper["build_review_prompts"](
                 repo,
                 "commit",
                 "HEAD",
-                "# Commit Diff\n" + "safe review content\n" * 18_000,
+                header + line * repetitions,
                 "",
                 "",
             )
 
         self.assertEqual(len(prompts), 1)
+        size = len(prompts[0].encode("utf-8"))
+        self.assertLessEqual(size, self.helper["MAX_REVIEW_PROMPT_BYTES"])
+        self.assertGreater(
+            size,
+            self.helper["MAX_REVIEW_PROMPT_BYTES"] - len(line.encode("utf-8")),
+        )
 
     def test_bundle_above_prompt_limit_uses_complete_bounded_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1876,6 +1893,35 @@ class AutoreviewHardeningTests(unittest.TestCase):
             )
         )
         self.assertTrue(all("Oversized review bundle chunk:" in prompt for prompt in prompts))
+
+    def test_explicit_pass_budget_keeps_byte_limits_and_complete_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            bundle = "# Commit Diff\n" + "safe review content\n" * 100_000
+            with self.assertRaisesRegex(SystemExit, "more than 8 bounded passes"):
+                self.helper["build_review_prompts"](
+                    repo, "commit", "HEAD", bundle, "", ""
+                )
+            prompts = self.helper["build_review_prompts"](
+                repo, "commit", "HEAD", bundle, "", "", max_passes=16
+            )
+            self.assertGreater(len(prompts), 8)
+            self.assertLessEqual(len(prompts), 16)
+            self.assertTrue(all(
+                len(prompt.encode("utf-8")) <= self.helper["MAX_REVIEW_PROMPT_BYTES"]
+                for prompt in prompts
+            ))
+            self.assertEqual(
+                sum(prompt.count("safe review content\n") for prompt in prompts),
+                100_000,
+            )
+            for limit in (0, 65):
+                with self.subTest(limit=limit), self.assertRaisesRegex(
+                    SystemExit, "between 1 and 64"
+                ):
+                    self.helper["build_review_prompts"](
+                        repo, "commit", "HEAD", bundle, "", "", max_passes=limit
+                    )
 
     def test_kimi_prompt_budget_partitions_before_argv_limits(self) -> None:
         if os.name == "nt":
@@ -1954,13 +2000,11 @@ class AutoreviewHardeningTests(unittest.TestCase):
             rows[(cells[0], cells[7])] = cells
 
         expected_rows = {
-            ("Fable 5", "high"),
-            ("GPT-5.6 Sol", "xhigh"),
-            ("GPT-5.6 Sol", "high"),
-            ("Opus 5", "high"),
+            ("Fable 5.1", "high"),
+            ("GPT-6.1 Sol", "high"),
+            ("Opus 5.5", "high"),
             ("GPT-5.6 Terra", "max"),
-            ("Opus 5", "medium"),
-            ("GPT-5.6 Luna", "max"),
+            ("GPT-6 Luna", "max"),
         }
         self.assertEqual(set(rows), expected_rows)
         for cells in rows.values():
@@ -4627,6 +4671,16 @@ class AutoreviewHardeningTests(unittest.TestCase):
             )
         )
 
+    def test_plain_synthetic_placeholder_is_not_a_repeatable_secret(self) -> None:
+        source = 'value.secret = "synthetic";'
+        self.assertFalse(self.helper["secret_text_risk"](source))
+        self.assertEqual(self.helper["review_secret_fragments"](source), set())
+        self.assertTrue(
+            self.helper["secret_text_risk"](
+                'value.secret = "synthetic-" + "ActualPassword123!";'
+            )
+        )
+
     def test_secret_detector_does_not_trust_in_band_suppressions(self) -> None:
         for marker in ("pragma: allowlist secret", "gitleaks:allow"):
             with self.subTest(marker=marker):
@@ -4981,6 +5035,35 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 patch,
                 deletion_only_paths={"removed.ts"},
             )
+
+    def test_review_patch_redacts_repeated_secret_removed_from_another_file(self) -> None:
+        value = realistic_secret_value()
+        patch = (
+            "diff --git a/removed.ts b/removed.ts\n"
+            "deleted file mode 100644\n"
+            "--- a/removed.ts\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            f'-const apiKey = "{value}";\n'
+            "diff --git a/runtime.ts b/runtime.ts\n"
+            "--- a/runtime.ts\n"
+            "+++ b/runtime.ts\n"
+            "@@ -1,2 +1,2 @@\n"
+            f'-const apiKey = "{value}";\n'
+            "+const apiKey = process.env.API_KEY;\n"
+            " run();\n"
+        )
+        redacted = self.helper["validate_review_patch"](
+            "branch diff",
+            ["removed.ts", "runtime.ts"],
+            patch,
+            deletion_only_paths={"removed.ts"},
+        )
+        self.assertNotIn(value, redacted)
+        self.assertEqual(redacted.count('-const apiKey = "redacted";'), 2)
+        self.assertIn("+const apiKey = process.env.API_KEY;", redacted)
+        self.assertIn(" run();", redacted)
+        self.assertEqual(redacted.count("\n"), patch.count("\n"))
 
     def test_review_patch_refuses_secret_repeated_in_context(self) -> None:
         value = realistic_secret_value()

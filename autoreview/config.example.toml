@@ -15,8 +15,8 @@ candidates = ["sol", "opus5"]
 # Override selected-effort DeepSWE inputs and owner scores without copying it.
 [candidates.sol]
 manual_approval_required = false
-cost = 3.8
-intelligence = 8.5
-taste = 8
-deepswe_pass_rate = 69
-deepswe_avg_cost_usd = 3.47
+cost = 1.1
+intelligence = 7.5
+taste = 7
+deepswe_pass_rate = 75.2
+deepswe_avg_cost_usd = 1.05

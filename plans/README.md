@@ -29,9 +29,9 @@ agent copies a template and completes the required sections:
 - [`assets/plan-template.md`](assets/plan-template.md): the Markdown fallback.
 
 A plan with status `active` and a complete goal block runs without further
-prompting. Paste the goal block to start or resume execution. The agent keeps
-one task `in_progress`, verifies each task, records the evidence, and stops
-only at a valid stop state.
+prompting. Paste the goal block to start or resume execution. The agent runs
+independent tasks in parallel, verifies each task, records the evidence, and
+stops only at a valid stop state.
 
 ## How a plan works
 
@@ -39,8 +39,8 @@ only at a valid stop state.
   the proof beside it.
 - Each task states verifiable success criteria: named tests, exact commands,
   or a measurable observation.
-- The execution log records dated actions, so a new session resumes from the
-  ledger, the log, and git state.
+- Current resume state routes a new session to each in-progress task, its
+  owner, and verified git state. The execution log retains dated history.
 - Evidence records exact counts and names. A check that could not run is
   `UNVERIFIED` instead of green.
 - Execution repairs the pockets of complexity it reveals at their owning
@@ -55,15 +55,25 @@ only at a valid stop state.
 - [`references/structure.md`](references/structure.md): vocabulary, statuses,
   required sections, ledger rules, and evidence rules.
 - [`references/execution.md`](references/execution.md): the goal block, the
-  execution loop, the commit convention, the stop states, and closure.
+  execution loop, parallel execution, the commit convention, the stop states,
+  and closure.
 - [`references/architecture.md`](references/architecture.md): seam quality,
   complexity repair, and diagrams.
 - [`references/html-format.md`](references/html-format.md): the file and
   editing rules for the HTML artifact.
+- [`references/context-budget.md`](references/context-budget.md): size review,
+  safe document compaction, bounded resume reads, and the cold-resume check.
+- [`GLOSSARY.md`](GLOSSARY.md): technical terms for prose verification.
 
 ## Maintenance
 
-Run from the repository root:
+Run from the installed skill directory:
+
+```bash
+../technical-writing/scripts/technical-writing lint . --glossary GLOSSARY.md --format text
+```
+
+Run the skill validator from the skills source repository root:
 
 ```bash
 ./scripts/validate-skills

@@ -71,7 +71,7 @@ the current host agent. The built-in profiles are:
 "$AUTOREVIEW" --profile fable
 ```
 
-Opus 5 high is the default Claude-side code reviewer. Fable requires manual
+Opus 5.5 high is the default Claude-side code reviewer. Fable requires manual
 approval through an explicit CLI profile, model, or reviewer request. Reserve it
 for architecture-sensitive or exceptionally complex change review. Fable is
 never selected automatically, approved by config or environment defaults, or
@@ -143,6 +143,15 @@ threshold only when requested:
 Pause and report when a finding requires a new protocol, schema, storage layout,
 public API, release process, or owner boundary. Also pause when two
 review-triggered patch cycles have not converged.
+
+## Large review inputs
+
+The helper permits eight bounded passes by default. Prefer a coherent change
+split when the complete diff exceeds that budget. Set an explicit `--max-passes N`
+budget for a replacement that must remain intact. Values range from 1 through 64.
+Record the reason and actual pass count in the owning plan. This option changes
+only the number of passes. It does not increase the per-pass byte limit, permit
+truncation, bypass secret scanning, or change reviewer isolation.
 
 ## Safety
 

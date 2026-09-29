@@ -31,6 +31,8 @@ Markdown is the fallback when the repository requires it.
 5. When execution reveals an architecture problem, apply
    [`references/architecture.md`](references/architecture.md).
 6. Write plan prose with the technical-writing skill in developer mode.
+7. Apply [`references/context-budget.md`](references/context-budget.md) when
+   creating or revising resume instructions, or when repeated history crowds current work.
 
 ## Core rules
 
@@ -39,13 +41,19 @@ Markdown is the fallback when the repository requires it.
   commands, or a measurable observation.
 - Keep one status token per ledger cell, with the proof in the evidence
   cell.
-- Keep exactly one task `in_progress` per plan during autonomous work.
+- Prioritize parallelism. Run independent tasks at the same time, each
+  `in_progress` with a named owner and its own worktree. A task waits only
+  on a real dependency.
+- The orchestrator reviews delegated work before merge. It keeps the ledger
+  and Current resume state current. It deletes merged local and remote
+  branches and worktrees. It coordinates with peer orchestrators and never
+  drives their plans.
 - When the commit policy permits, record each ledger transition in a plan
   commit right after its work commit.
 - Record evidence with exact counts and names. Mark checks that could not
   run `UNVERIFIED` instead of counting them green.
 - Keep the plan a thin control plane. Move narrative evidence to the
-  proof root.
+  proof root. Keep one current resume state, separate from execution history.
 - Repair the pockets of complexity that execution reveals at their owning
   seams, and route each repair through the ledger.
 - End every plan with a cleanup task that triggers when its final pull

@@ -24,9 +24,10 @@ ledgers and fenced text sketches for diagrams.
 The overview is the top of the page, in this order:
 
 1. The status line, as defined in [`structure.md`](structure.md).
-2. Outcome: the one-paragraph invariant.
-3. Progress: a bar plus counts, computed from the ledger.
-4. Architecture: the before and after diagrams, side by side.
+2. Current resume state, defined in [`structure.md`](structure.md).
+3. Outcome: the one-paragraph invariant.
+4. Progress: a stacked bar, a legend, and counts, computed from the ledger.
+5. Architecture: the before and after diagrams, side by side.
 
 The overview is the resume surface. A cold agent or a human reads only the
 overview to know where the plan stands.
@@ -61,11 +62,24 @@ by reading the bare name before the parameter.
 
 ## Progress computation
 
-The template's inline script derives progress from the ledger at load
-time. It counts rows and treats `done`, `no-action`, and `rejected` as
-terminal. It fills the bar and names the current `in_progress` task. The
-ledger stays the single source of truth. Without JavaScript the table
-still reads correctly, and the bar stays empty.
+The template's inline script derives progress from the ledger rows at load
+time. The bar reads left to right, and each segment width is a row count:
+
+1. `done`, green.
+2. `in_progress`, yellow, the leading edge.
+3. `blocked`, red with a hatch.
+4. `todo`, the empty track.
+5. `deferred`, `no-action`, and `rejected`, grey, at the right end.
+
+The legend gives the count of each segment, so no status depends on color
+alone. The count line gives the terminal rows (`done`, `no-action`, and
+`rejected`) and the ID of each `in_progress` task. It names each row with an
+unknown status, which counts as `todo`.
+
+The ledger status cells use the same colors. The colors are tokens on
+`:root`, with dark-mode and print values. The ledger stays the single
+source of truth. Without JavaScript the table still reads correctly, and the
+bar stays empty.
 
 ## Editing rules
 
@@ -75,6 +89,8 @@ still reads correctly, and the bar stays empty.
 - Append a log row before the log table's closing `</tbody>`. The
   template keeps the script in `<head>`. The execution log is therefore
   the last content in the file, and only closing tags follow it.
+- Rotate older log rows through the [compaction procedure](context-budget.md).
+  Keep the history link above the recent log table.
 - Keep task IDs and row order stable.
 - Update diagrams when a task changes the target structure, and keep
   component names identical across the before and after views.

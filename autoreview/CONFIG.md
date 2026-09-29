@@ -62,14 +62,14 @@ become an automatic default.
 ```toml
 [candidates.local-opus]
 engine = "claude"
-model = "claude-opus-5"
+model = "claude-opus-5-5"
 effort = "high"
 manual_approval_required = false
-cost = 6.6
-intelligence = 8
-taste = 8.5
+cost = 3.3
+intelligence = 9
+taste = 9
 deepswe_pass_rate = 73
-deepswe_avg_cost_usd = 6.08
+deepswe_avg_cost_usd = 3.07
 ```
 
 `engine` identifies the review harness. Supported runnable engines are
@@ -82,10 +82,12 @@ from the account catalog.
 The candidate table name is a stable ID for the complete reviewer
 configuration, not another model field.
 
-`cost` uses a literal 0–10 scale. The scale derives from DeepSWE's measured
-average task cost at the candidate's configured effort. Zero is free, and 10 is
-the most expensive candidate. Preserve the underlying measurement in
-`deepswe_avg_cost_usd`. Lower cost improves the automatic-selection score.
+`cost` uses a literal 0–10 scale. The scale derives from DeepSWE's average task
+cost at the candidate's configured effort. Zero is free, and 10 is the most
+expensive candidate. Preserve the underlying value in `deepswe_avg_cost_usd`.
+Until DeepSWE measures a new model, that value is an estimate: the
+predecessor's DeepSWE cost × the Artificial Analysis cost-per-task ratio at the
+same effort. Lower cost improves the automatic-selection score.
 `manual_approval_required` is a separate safety gate and does not affect the
 score. See
 [`MODEL_SELECTION.md`](MODEL_SELECTION.md) for the normalization formula and

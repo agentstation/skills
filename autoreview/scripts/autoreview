@@ -30,6 +30,7 @@ import time
 import tomllib
 import unicodedata
 import urllib.parse
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, NamedTuple
 
@@ -244,6 +245,11 @@ SECRET_ASSIGNMENT_PREFIX_PATTERN = re.compile(
     rf"(?i){SECRET_ASSIGNMENT_KEY_PATTERN}"
     r"\s*(?:=(?!=|>)|(?<!:):(?![:=]))\s*"
 )
+TYPESCRIPT_SECRET_DECLARATION_PATTERN = re.compile(
+    SECRET_ASSIGNMENT_PATTERN.pattern
+    + r"(?:<[A-Za-z_$][A-Za-z0-9_$.]*"
+    + r"(?:\s*,\s*[A-Za-z_$][A-Za-z0-9_$.]*)*>)?"
+)
 SECRET_BOOLEAN_DECLARATION_PATTERN = re.compile(
     r"(?im)^[ \t]*(?:(?:abstract|const|declare|export|final|internal|lateinit|"
     r"open|override|private|protected|public|readonly|static)\s+)*"
@@ -354,7 +360,7 @@ POWERSHELL_ENV_REFERENCE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 MAX_BUNDLE_TEXT_BYTES = 180_000
-MAX_REVIEW_PROMPT_BYTES = 512_000
+MAX_REVIEW_PROMPT_BYTES = 300_000
 # Kimi takes the prompt as a single `--prompt` argv element (no stdin mode),
 # so its per-pass ceiling must respect platform argv limits: Linux caps one
 # argument at MAX_ARG_STRLEN (131,072 bytes) and Windows caps the whole
@@ -386,6 +392,7 @@ SECRET_PLACEHOLDER_VALUES = {
     "placeholder",
     "redacted",
     "sample",
+    "synthetic",
     "secret-token",
     "test-auth-token",
     "test-key",
@@ -822,8 +829,8 @@ TEST_ENV_ALLOWED_EXACT = {
 }
 TEST_ENV_ALLOWED_PREFIXES = ("AUTOREVIEW_FAKE_", "LC_")
 DEFAULT_MODEL_BY_ENGINE = {
-    "codex": "gpt-5.6-sol",
-    "claude": "claude-opus-5",
+    "codex": "gpt-6.1-sol",
+    "claude": "claude-opus-5-5",
 }
 DEFAULT_CODEX_ACCESS_FALLBACK_MODEL: str | None = None
 DEFAULT_THINKING_BY_ENGINE = {
@@ -961,25 +968,25 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
     "candidates": {
         "sol": {
             "engine": "codex",
-            "model": "gpt-5.6-sol",
+            "model": "gpt-6.1-sol",
             "effort": "high",
             "manual_approval_required": False,
-            "cost": 3.8,
-            "intelligence": 8.5,
-            "taste": 8.0,
-            "deepswe_pass_rate": 69.0,
-            "deepswe_avg_cost_usd": 3.47,
+            "cost": 1.1,
+            "intelligence": 7.5,
+            "taste": 7.0,
+            "deepswe_pass_rate": 75.2,
+            "deepswe_avg_cost_usd": 1.05,
         },
         "opus5": {
             "engine": "claude",
-            "model": "claude-opus-5",
+            "model": "claude-opus-5-5",
             "effort": "high",
             "manual_approval_required": False,
-            "cost": 6.6,
-            "intelligence": 8.0,
-            "taste": 8.5,
+            "cost": 3.3,
+            "intelligence": 9.0,
+            "taste": 9.0,
             "deepswe_pass_rate": 73.0,
-            "deepswe_avg_cost_usd": 6.08,
+            "deepswe_avg_cost_usd": 3.07,
         },
         "terra": {
             "engine": "codex",
@@ -987,30 +994,30 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "effort": "max",
             "manual_approval_required": False,
             "cost": 4.3,
-            "intelligence": 8.0,
-            "taste": 7.0,
+            "intelligence": 6.0,
+            "taste": 6.5,
             "deepswe_pass_rate": 70.0,
             "deepswe_avg_cost_usd": 3.96,
         },
         "luna": {
             "engine": "codex",
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "effort": "max",
             "manual_approval_required": False,
-            "cost": 0.7,
-            "intelligence": 6.0,
-            "taste": 6.0,
+            "cost": 0.3,
+            "intelligence": 5.0,
+            "taste": 5.5,
             "deepswe_pass_rate": 67.0,
-            "deepswe_avg_cost_usd": 0.61,
+            "deepswe_avg_cost_usd": 0.23,
         },
         "fable5": {
             "engine": "claude",
-            "model": "claude-fable-5",
+            "model": "claude-fable-5-1",
             "effort": "high",
             "manual_approval_required": True,
             "cost": 10.0,
             "intelligence": 10.0,
-            "taste": 9.0,
+            "taste": 10.0,
             "deepswe_pass_rate": 69.0,
             "deepswe_avg_cost_usd": 9.18,
         },
@@ -2510,6 +2517,8 @@ def snapshot_destination(root: Path, rel: str) -> Path:
 
 def write_snapshot_blob(root: Path, rel: str, content: bytes) -> None:
     destination = snapshot_destination(root, rel)
+    if rel.endswith(".json.gz"):
+        content = decode_review_json_gzip(content).encode("utf-8")
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(content)
@@ -2545,12 +2554,7 @@ def materialize_index_snapshot(repo: Path, root: Path, paths: list[str]) -> int:
         if mode == b"160000":
             continue
         rel = raw_path.decode(SUBPROCESS_TEXT_ENCODING, errors="strict")
-        content = git_bytes(
-            repo,
-            "cat-file",
-            "blob",
-            object_id.decode("ascii"),
-        ).stdout
+        content = review_blob_bytes(repo, object_id.decode("ascii"), rel)
         write_snapshot_blob(root, rel, content)
         count += 1
     return count
@@ -2582,12 +2586,7 @@ def materialize_tree_snapshot(
         if object_type != b"blob" or mode == b"160000":
             continue
         rel = raw_path.decode(SUBPROCESS_TEXT_ENCODING, errors="strict")
-        content = git_bytes(
-            repo,
-            "cat-file",
-            "blob",
-            object_id.decode("ascii"),
-        ).stdout
+        content = review_blob_bytes(repo, object_id.decode("ascii"), rel)
         write_snapshot_blob(root, rel, content)
         count += 1
     return count
@@ -2994,6 +2993,7 @@ def prepare_trufflehog_history(
             repo,
             "diff",
             *SAFE_DIFF_FLAGS,
+            "--no-renames",
             "--name-only",
             "--cached",
             "-z",
@@ -3002,6 +3002,7 @@ def prepare_trufflehog_history(
             repo,
             "diff",
             *SAFE_DIFF_FLAGS,
+            "--no-renames",
             "--name-only",
             "-z",
         )
@@ -3044,6 +3045,7 @@ def prepare_trufflehog_history(
             repo,
             "diff",
             *SAFE_DIFF_FLAGS,
+            "--no-renames",
             "--name-only",
             "-z",
             "--end-of-options",
@@ -3064,6 +3066,7 @@ def prepare_trufflehog_history(
             repo,
             "show",
             *SAFE_DIFF_FLAGS,
+            "--no-renames",
             "--name-only",
             "--format=",
             "-z",
@@ -7018,7 +7021,7 @@ def typescript_secret_type_declarations(
 ) -> tuple[re.Match[str], ...]:
     return tuple(
         match
-        for match in SECRET_ASSIGNMENT_PATTERN.finditer(text)
+        for match in TYPESCRIPT_SECRET_DECLARATION_PATTERN.finditer(text)
         if typescript_declaration_type_annotation(
             text,
             match,
@@ -8655,13 +8658,25 @@ def redact_deletion_only_secret_values(
         if fragment_pattern.search(additional_secret_context):
             refuse_secret_like_review_patch(label)
         for index, unit in enumerate(units):
-            searchable = (
-                diff_section_without_deleted_line_contents(unit)
-                if index in deletion_sections
-                else unit
-            )
+            searchable = diff_section_without_deleted_line_contents(unit)
             if fragment_pattern.search(searchable):
                 refuse_secret_like_review_patch(label)
+            if index in deletion_sections or not unit.startswith("diff --git "):
+                continue
+            old_path, new_path = diff_section_paths(unit)
+            if old_path not in expected_paths or new_path not in expected_paths:
+                continue
+            old_content, _new_content = unified_diff_contents(unit)
+            fragments = {
+                match.group("fragment")
+                for match in fragment_pattern.finditer(old_content)
+            }
+            if fragments:
+                deletion_sections[index] = (
+                    javascript_review_dialect(old_path),
+                    old_content,
+                    fragments,
+                )
 
     for index, (dialect, _old_content, fragments) in deletion_sections.items():
         if not fragments:
@@ -8675,12 +8690,14 @@ def redact_deletion_only_secret_values(
         except SystemExit:
             refuse_secret_like_review_patch(label)
         old_content, new_content = unified_diff_contents(redacted)
+        _old_path, new_path = diff_section_paths(redacted)
+        new_dialect = javascript_review_dialect(new_path) if new_path else None
         residual_pattern = known_secret_fragment_pattern(
             sorted(fragments, key=lambda fragment: (-len(fragment), fragment))
         )
         if (
             secret_text_risk(old_content, javascript_dialect=dialect)
-            or secret_text_risk(new_content)
+            or secret_text_risk(new_content, javascript_dialect=new_dialect)
             or (residual_pattern is not None and residual_pattern.search(old_content))
         ):
             refuse_secret_like_review_patch(label)
@@ -9054,14 +9071,167 @@ def validate_review_patch(
     return patch
 
 
-def require_no_binary_diff(label: str, numstat: str) -> None:
+# Limits apply before allocation of the decoded catalog or formatted review text.
+MAX_JSON_GZIP_BYTES = 8 * 1024 * 1024
+MAX_JSON_DECODED_BYTES = 32 * 1024 * 1024
+MAX_JSON_RENDERED_BYTES = 64 * 1024 * 1024
+MAX_JSON_GZIP_FILES = 16
+
+
+def decode_review_json_gzip(content: bytes) -> str:
+    if len(content) > MAX_JSON_GZIP_BYTES:
+        raise SystemExit("JSON-gzip compressed input exceeds the review limit")
+    try:
+        # Optional headers can carry unreviewed strings. Accept one member with
+        # the fixed header only; do not discard comments or concatenated members.
+        if len(content) < 18 or content[:4] != b"\x1f\x8b\x08\x00":
+            raise ValueError("unsupported gzip header")
+        decoder = zlib.decompressobj(wbits=31)
+        decoded = decoder.decompress(content, MAX_JSON_DECODED_BYTES + 1)
+        if len(decoded) > MAX_JSON_DECODED_BYTES:
+            raise SystemExit("JSON-gzip decoded input exceeds the review limit")
+        if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+            raise ValueError("incomplete or concatenated gzip member")
+        text = decoded.decode("utf-8")
+        # Validate without changing number precision or spelling.
+        def reject_constant(_value: str) -> None:
+            raise ValueError("non-JSON constant")
+        json.loads(text, parse_int=str, parse_float=str, parse_constant=reject_constant)
+    except (OSError, EOFError, UnicodeError, ValueError, RecursionError, zlib.error):
+        raise SystemExit("invalid gzip or UTF-8 JSON in review input") from None
+
+    # Insert layout only outside strings. Preserve duplicate keys, number tokens,
+    # string escapes, and key order so normalization cannot hide a content change.
+    output = io.StringIO()
+    depth = 0
+    quoted = False
+    escaped = False
+    for char in text:
+        if quoted:
+            output.write(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+            output.write(char)
+        elif char in "[{":
+            depth += 1
+            if depth > 64:
+                raise SystemExit("JSON-gzip nesting exceeds the review limit")
+            output.write(char + "\n" + "  " * depth)
+        elif char in "]}":
+            depth -= 1
+            output.write("\n" + "  " * depth + char)
+        elif char == ",":
+            output.write(",\n" + "  " * depth)
+        elif char == ":":
+            output.write(": ")
+        elif char not in " \t\r\n":
+            output.write(char)
+        if output.tell() > MAX_JSON_RENDERED_BYTES:
+            raise SystemExit("JSON-gzip rendered input exceeds the review limit")
+    rendered = output.getvalue() + "\n"
+    if len(rendered.encode("utf-8")) > MAX_JSON_RENDERED_BYTES:
+        raise SystemExit("JSON-gzip rendered input exceeds the review limit")
+    return rendered
+
+
+def review_blob_bytes(repo: Path, object_id: str, rel: str) -> bytes:
+    if rel.endswith(".json.gz"):
+        size = int(git(repo, "cat-file", "-s", object_id))
+        if size > MAX_JSON_GZIP_BYTES:
+            raise SystemExit("JSON-gzip compressed input exceeds the review limit")
+    return git_bytes(repo, "cat-file", "blob", object_id).stdout
+
+
+def expand_json_gzip_diff(
+    repo: Path, label: str, patch: str, raw_diff: str, numstat: str,
+) -> str:
+    """Expand committed JSON-gzip blobs; retain Git's original change metadata."""
+    records = iter(raw_diff.split("\0"))
+    changes = []
+    for record in records:
+        if not record:
+            continue
+        fields = record.split()
+        if len(fields) != 5 or not fields[0].startswith(":"):
+            raise SystemExit("invalid raw diff for JSON-gzip review")
+        old_mode, new_mode, old_oid, new_oid, status = fields
+        old_path = next(records, "")
+        new_path = next(records, "") if status[0] in "RC" else old_path
+        changes.append((old_mode[1:], new_mode, old_oid, new_oid, old_path, new_path))
+    eligible = [c for c in changes if c[4].endswith(".json.gz") or c[5].endswith(".json.gz")]
+    if not eligible:
+        require_no_binary_diff(label, numstat)
+        return patch
+    if len(eligible) > MAX_JSON_GZIP_FILES:
+        raise SystemExit("too many JSON-gzip files in one review target")
+    # Renames across formats are not silently reinterpreted as JSON-gzip.
+    allowed = set()
+    for old_mode, new_mode, _old_oid, _new_oid, old_path, new_path in eligible:
+        if not old_path.endswith(".json.gz") or not new_path.endswith(".json.gz"):
+            raise SystemExit("JSON-gzip review refuses renames across file formats")
+        if old_mode not in {"000000", "100644", "100755"} or new_mode not in {"000000", "100644", "100755"}:
+            raise SystemExit("JSON-gzip review requires regular files")
+        allowed.update((old_path, new_path))
+    require_no_binary_diff(label, numstat, allowed_paths=allowed)
+    units = review_bundle_units(patch)
+    indexes = [i for i, unit in enumerate(units) if unit.startswith("diff --git ")]
+    if len(indexes) != len(changes):
+        raise SystemExit("JSON-gzip review cannot match raw changes to patch sections")
+    for index, change in zip(indexes, changes):
+        if change not in eligible:
+            continue
+        old_mode, new_mode, old_oid, new_oid, old_path, new_path = change
+        old = decode_review_json_gzip(review_blob_bytes(repo, old_oid, old_path)) if old_mode != "000000" else ""
+        new = decode_review_json_gzip(review_blob_bytes(repo, new_oid, new_path)) if new_mode != "000000" else ""
+        with tempfile.TemporaryDirectory(prefix="autoreview-json-gzip.", dir=safe_temp_root(repo)) as tempdir:
+            root = Path(tempdir)
+            (root / "old").write_text(old, encoding="utf-8")
+            (root / "new").write_text(new, encoding="utf-8")
+            result = git_result(root, "diff", "--no-index", "--text", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--", "old", "new", check=False)
+            if result.returncode not in {0, 1}:
+                raise SystemExit("unable to diff decoded JSON-gzip review input")
+        header = []
+        for line in literal_lf_lines(units[index]):
+            if line.startswith(("Binary files ", "GIT binary patch", "--- ", "@@")):
+                break
+            header.append(line)
+        header.append("JSON-gzip: decoded UTF-8 JSON; hunk lines refer to formatted content\n")
+        header.append(f"compressed objects: {old_oid} -> {new_oid}\n")
+        if old == new:
+            header.append("Decoded JSON unchanged; compressed representation or file metadata changed.\n")
+        else:
+            old_label = json.dumps("a/" + old_path, ensure_ascii=True) if old else "/dev/null"
+            new_label = json.dumps("b/" + new_path, ensure_ascii=True) if new else "/dev/null"
+            header.extend((f"--- {old_label}\n", f"+++ {new_label}\n"))
+            hunks = result.stdout.find("\n@@")
+            if hunks < 0:
+                raise SystemExit("decoded JSON-gzip change has no review hunks")
+            header.append(result.stdout[hunks + 1:])
+        units[index] = "".join(header)
+        old_changed, new_changed = unified_diff_contents(units[index])
+        require_no_secret_values("decoded JSON-gzip changes", old_changed)
+        require_no_secret_values("decoded JSON-gzip changes", new_changed)
+    return "".join(units)
+
+
+def require_no_binary_diff(label: str, numstat: str, *, allowed_paths: set[str] | None = None) -> None:
     binary_paths: list[str] = []
-    for record in numstat.split("\0"):
+    records = iter(numstat.split("\0"))
+    for record in records:
         if not record:
             continue
         fields = record.split("\t", 2)
-        if len(fields) == 3 and fields[0] == "-" and fields[1] == "-":
-            binary_paths.append(fields[2])
+        if len(fields) != 3:
+            raise SystemExit("invalid numstat for binary review guard")
+        paths = [fields[2]] if fields[2] else [next(records, ""), next(records, "")]
+        if fields[:2] == ["-", "-"]:
+            binary_paths.extend(path for path in paths if path not in (allowed_paths or set()))
     if binary_paths:
         details = "\n".join(
             f"- {display_escape(path, 500)}"
@@ -9573,17 +9743,10 @@ def branch_bundle(
         "--end-of-options",
         diff_range,
     )
-    require_no_binary_diff(
-        "branch diff",
-        git(
-            repo,
-            "diff",
-            *SAFE_DIFF_FLAGS,
-            "--numstat",
-            "-z",
-            "--end-of-options",
-            diff_range,
-        ),
+    branch_patch = expand_json_gzip_diff(
+        repo, "branch diff", branch_patch,
+        git(repo, "diff", *SAFE_DIFF_FLAGS, "--raw", "--no-abbrev", "-z", "--end-of-options", diff_range),
+        git(repo, "diff", *SAFE_DIFF_FLAGS, "--numstat", "-z", "--end-of-options", diff_range),
     )
     require_no_gitlink_diff(
         "branch diff",
@@ -9669,18 +9832,10 @@ def commit_bundle(
         "--end-of-options",
         commit_ref,
     )
-    require_no_binary_diff(
-        "commit diff",
-        git(
-            repo,
-            "show",
-            *SAFE_DIFF_FLAGS,
-            "--numstat",
-            "--format=",
-            "-z",
-            "--end-of-options",
-            commit_ref,
-        ),
+    commit_patch = expand_json_gzip_diff(
+        repo, "commit diff", commit_patch,
+        git(repo, "show", *SAFE_DIFF_FLAGS, "--raw", "--no-abbrev", "-z", "--format=", "--end-of-options", commit_ref),
+        git(repo, "show", *SAFE_DIFF_FLAGS, "--numstat", "-z", "--format=", "--end-of-options", commit_ref),
     )
     require_no_gitlink_diff(
         "commit diff",
@@ -10512,7 +10667,13 @@ def build_review_prompts(
     extra_prompt: str,
     datasets: str,
     max_prompt_bytes: int = MAX_REVIEW_PROMPT_BYTES,
+    *,
+    max_passes: int | None = None,
 ) -> list[str]:
+    if max_passes is None:
+        max_passes = MAX_REVIEW_PASSES
+    if not 1 <= max_passes <= 64:
+        raise SystemExit("review pass budget must be between 1 and 64")
     full_prompt = render_review_prompt(
         repo,
         target,
@@ -10544,18 +10705,18 @@ def build_review_prompts(
             "review prompt files and datasets leave too little room for change chunks; "
             "reduce the extra review context"
         )
-    if utf8_size(bundle) > content_limit * MAX_REVIEW_PASSES:
+    if utf8_size(bundle) > content_limit * max_passes:
         raise SystemExit(
-            f"review bundle requires more than {MAX_REVIEW_PASSES} bounded passes; "
+            f"review bundle requires more than {max_passes} bounded passes; "
             "reduce or split the change before review"
         )
 
     for _attempt in range(4):
         chunks = split_review_bundle(bundle, content_limit)
-        if len(chunks) > MAX_REVIEW_PASSES:
+        if len(chunks) > max_passes:
             raise SystemExit(
                 f"review bundle requires {len(chunks)} bounded passes; "
-                f"limit {MAX_REVIEW_PASSES}; reduce or split the change before review"
+                f"limit {max_passes}; reduce or split the change before review"
             )
         prompts = [
             render_review_prompt(
@@ -10836,7 +10997,7 @@ def ensure_claude_isolation_supported(args: argparse.Namespace, repo: Path) -> N
     selected_models = [args.model, *(getattr(args, "fallback_model", "") or "").split(",")]
     uses_fable = any(model_is_fable(model) for model in selected_models)
     minimum_version = CLAUDE_FABLE_MIN_VERSION if uses_fable else CLAUDE_SAFE_MODE_MIN_VERSION
-    version_reason = "for claude-fable-5" if uses_fable else "for --safe-mode"
+    version_reason = "for Claude Fable" if uses_fable else "for --safe-mode"
     if result.returncode != 0:
         raise SystemExit(f"claude engine requires Claude Code >= {format_version(minimum_version)}; --version failed")
     version = parse_cli_version(result.stdout or result.stderr)
@@ -12778,7 +12939,7 @@ def self_test_engine_isolation() -> int:
                 raise SystemExit("claude version floor self-test failed")
 
             os.environ["AUTOREVIEW_FAKE_CLAUDE_VERSION"] = "2.1.169 (Claude Code)"
-            args.model = "claude-fable-5"
+            args.model = "claude-fable-5-1"
             try:
                 ensure_claude_isolation_supported(args, repo)
             except SystemExit as exc:
@@ -14332,7 +14493,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--reviewers",
         default=os.environ.get("AUTOREVIEW_REVIEWERS"),
-        help="Comma-separated review panel, e.g. codex,claude,pi,kimi or codex:gpt-5.6-sol:high.",
+        help="Comma-separated review panel, e.g. codex,claude,pi,kimi or codex:gpt-6.1-sol:high.",
     )
     parser.add_argument("--panel", action="store_true", help="Run a Codex/Claude review panel unless --engine changes the first reviewer.")
     parser.add_argument(
@@ -14476,6 +14637,13 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--max-passes",
+        type=int,
+        choices=range(1, 65),
+        default=MAX_REVIEW_PASSES,
+        help="Explicit review pass budget (default: 8). Per-pass byte and isolation limits remain unchanged.",
+    )
     parser.add_argument("--self-test-config-defaults", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--self-test-fallback-scope", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--self-test-engine-isolation", action="store_true", help=argparse.SUPPRESS)
@@ -14978,6 +15146,7 @@ def dry_run_preflight(
                 threshold_extra_prompt,
                 datasets,
                 max_prompt_bytes_for_reviewers(reviewers),
+                max_passes=getattr(args, "max_passes", MAX_REVIEW_PASSES),
             )
             for prompt in prompts:
                 require_no_known_secret_fragments(
@@ -15196,13 +15365,13 @@ def self_test_config_defaults() -> None:
         for key in keys:
             os.environ.pop(key, None)
         default_codex = reviewer_args(reviewer_test_args(engine="codex"))[0]
-        if default_codex.model != "gpt-5.6-sol":
+        if default_codex.model != "gpt-6.1-sol":
             raise SystemExit(f"self-test config defaults failed: default codex model={default_codex.model!r}")
         if default_codex.fallback_model is not None:
             raise SystemExit(
                 f"self-test config defaults failed: default codex fallback={default_codex.fallback_model!r}"
             )
-        explicit_sol = reviewer_args(reviewer_test_args(engine="codex", model=["gpt-5.6-sol"]))[0]
+        explicit_sol = reviewer_args(reviewer_test_args(engine="codex", model=["gpt-6.1-sol"]))[0]
         if explicit_sol.fallback_model is not None:
             raise SystemExit(
                 f"self-test config defaults failed: explicit Sol access fallback={explicit_sol.fallback_model!r}"
@@ -15213,7 +15382,7 @@ def self_test_config_defaults() -> None:
         if xhigh_effort.thinking != "xhigh":
             raise SystemExit("self-test config defaults failed: Codex xhigh thinking should be accepted")
         default_claude = reviewer_args(reviewer_test_args(engine="claude"))[0]
-        if default_claude.model != "claude-opus-5":
+        if default_claude.model != "claude-opus-5-5":
             raise SystemExit(f"self-test config defaults failed: default claude model={default_claude.model!r}")
         if default_claude.thinking != "high":
             raise SystemExit(
@@ -15236,7 +15405,7 @@ def self_test_config_defaults() -> None:
                 reviewer_args(
                     reviewer_test_args(
                         engine="pi",
-                        model=["anthropic/claude-opus-5"],
+                        model=["anthropic/claude-opus-5-5"],
                     )
                 )[0],
             ],
@@ -15245,7 +15414,7 @@ def self_test_config_defaults() -> None:
         fable = reviewer_args(
             reviewer_test_args(
                 engine="claude",
-                model=["claude-fable-5"],
+                model=["claude-fable-5-1"],
             )
         )[0]
         try:
@@ -15673,6 +15842,7 @@ def main_impl() -> int:
         extra_prompt,
         datasets,
         max_prompt_bytes,
+        max_passes=getattr(args, "max_passes", MAX_REVIEW_PASSES),
     )
     for prompt in prompts:
         require_no_known_secret_fragments(
