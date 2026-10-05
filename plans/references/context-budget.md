@@ -6,29 +6,26 @@ available through exact links.
 
 ## Review triggers
 
-Check size at task transitions and before a handoff or stop. Use:
+A plan has no size limit. It holds all the control content that its outcome
+needs. The execution log is different: it grows with each action, so older
+entries can crowd current state. Compact the log as it grows.
 
-```bash
-wc -l -w -c <plan-path>
-```
-
-Review the plan when any default trigger applies:
+Check the triggers at task transitions and before a handoff or stop. Review
+the plan when any default trigger applies:
 
 | Surface | Review trigger |
 | --- | --- |
-| Whole plan source | More than 4,000 words or 32,000 bytes. |
-| Current resume state | More than 500 words. |
-| Handoff | More than 250 words. |
 | Execution log inside the plan | More than 10 entries. |
+| Current resume state | More than 500 words, or 150 words per `in_progress` task when that is larger. |
+| Current resume state | Holds dated narrative from before the latest task transition, or disagrees with the ledger. |
+| Handoff | More than 250 words. |
 | Resume procedure | Requires full historical logs or repeated proof-root reads. |
 
 These are maintenance defaults, not model token limits or product acceptance
-gates. Count raw HTML too. Do not minify markup or shorten identifiers to
-pass the check. Long table rows can hide growth from a line limit.
+gates. Do not merge log entries or shorten them to pass a check.
 
-If required control content exceeds a default, record the reason and the
-bounded read path. Do not remove requirements to satisfy a size target.
-Split ownership only when the work has distinct outcomes.
+Do not remove or shorten control content to reduce plan size. Split a plan
+only when the work has distinct outcomes, not because of its size.
 
 ## Information ownership
 
@@ -43,7 +40,7 @@ Keep active constraints and accepted decisions discoverable from the plan.
 Record a decision's reason and re-open condition once. Do not re-open it
 without changed evidence or owner direction.
 
-Measure the required resume reading as well as the plan size. Include the
+Measure the required resume reading. Include the
 in-progress task contracts and current proof sections that the resume instructions
 require. Record their paths, sections, and combined word or byte count after
 compaction. Do not count unopened evidence as resume input.
@@ -65,7 +62,7 @@ required invariant or acceptance condition.
 8. Compare the protected content before and after the move.
 9. Verify links, anchors, ledger statuses, and the plan's existing structural checks.
 10. Run the cold-resume check below.
-11. Append one short compaction entry with size, preservation, and resume results.
+11. Append one short compaction entry with the moved entry count, preservation, and resume results.
 
 For large moves, compare counts and content hashes of the moved sections.
 These checks prove preservation, not product correctness. Use existing tools

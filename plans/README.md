@@ -61,8 +61,9 @@ stops only at a valid stop state.
   complexity repair, and diagrams.
 - [`references/html-format.md`](references/html-format.md): the file and
   editing rules for the HTML artifact.
-- [`references/context-budget.md`](references/context-budget.md): size review,
-  safe document compaction, bounded resume reads, and the cold-resume check.
+- [`references/context-budget.md`](references/context-budget.md): log review
+  triggers, safe document compaction, bounded resume reads, and the cold-resume
+  check.
 - [`GLOSSARY.md`](GLOSSARY.md): technical terms for prose verification.
 
 ## Maintenance

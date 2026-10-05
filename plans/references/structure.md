@@ -101,6 +101,9 @@ and an execution log.
 ## Current resume state
 
 Keep one current record inside the plan. Replace obsolete values in place.
+The record is not a log. Before you write the new state, move older narrative
+to the execution log or the task's proof file.
+
 Execution entries retain dated evidence. They do not own current instructions.
 The ledger owns task status. The resume record links to each `in_progress` row.
 
@@ -196,13 +199,16 @@ the check roster.
 
 ## Size rules
 
-Keep the plan a thin control plane and the proof root thick.
+A plan has no size limit. Keep the plan a thin control plane and the proof
+root thick. Narrative evidence goes to the proof root because of its type,
+not its size.
 
 - Put current state and the ledger before detailed task content. In HTML,
   source lines for styles and scripts do not count as visible content.
-- Use the [context budgets](context-budget.md), not line count alone.
-- Split the plan when a phase grows into its own outcome. An oversized plan
-  cannot be re-read at resume, which defeats the ledger.
+- Compact the execution log as it grows, through the
+  [compaction procedure](context-budget.md).
+- Split the plan when a phase grows into its own outcome, not because of
+  plan size.
 
 ## Optional sections
 
