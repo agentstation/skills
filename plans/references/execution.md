@@ -59,7 +59,8 @@ branch, and the completion gate exactly.
    commands.
 7. Commit the work per the commit convention.
 8. Write the task's proof file. Append a short execution entry with a proof
-   link, work commit, and test counts. Update Current resume state.
+   link, work commit, and test counts. Replace Current resume state. Do not
+   append to it.
 9. Set the task terminal with evidence in the ledger row. Commit the
    plan update per the commit convention.
 10. Task completion is a checkpoint, not the goal. Continue with the
