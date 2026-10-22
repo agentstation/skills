@@ -12,6 +12,7 @@ import copy
 import functools
 import hashlib
 import io
+import importlib.util
 import json
 import math
 import os
@@ -961,9 +962,8 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
         "sol": {"candidates": ["sol"]},
         "opus": {"candidates": ["opus5"]},
         "cross-lab": {"candidates": ["sol", "opus5"]},
-        "value": {"candidates": ["terra"]},
+        "value": {"candidates": ["sol"]},
         "budget": {"candidates": ["luna"]},
-        "fable": {"candidates": ["fable5"]},
     },
     "candidates": {
         "sol": {
@@ -988,17 +988,6 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "deepswe_pass_rate": 73.0,
             "deepswe_avg_cost_usd": 3.07,
         },
-        "terra": {
-            "engine": "codex",
-            "model": "gpt-5.6-terra",
-            "effort": "max",
-            "manual_approval_required": False,
-            "cost": 4.3,
-            "intelligence": 6.0,
-            "taste": 6.5,
-            "deepswe_pass_rate": 70.0,
-            "deepswe_avg_cost_usd": 3.96,
-        },
         "luna": {
             "engine": "codex",
             "model": "gpt-6-luna",
@@ -1010,17 +999,20 @@ BUILTIN_REVIEW_CONFIG: dict[str, Any] = {
             "deepswe_pass_rate": 67.0,
             "deepswe_avg_cost_usd": 0.23,
         },
-        "fable5": {
-            "engine": "claude",
-            "model": "claude-fable-5-1",
-            "effort": "high",
-            "manual_approval_required": True,
-            "cost": 10.0,
-            "intelligence": 10.0,
-            "taste": 10.0,
-            "deepswe_pass_rate": 69.0,
-            "deepswe_avg_cost_usd": 9.18,
-        },
+    },
+}
+# Schema v1 overlays could omit identity fields inherited from removed built-ins.
+# These records only complete legacy configuration; reviewer policy rejects them.
+LEGACY_REVIEW_CANDIDATES: dict[str, dict[str, Any]] = {
+    "fable5": {
+        "engine": "claude", "model": "claude-fable-5-1", "effort": "high",
+        "manual_approval_required": True, "cost": 10.0, "intelligence": 10.0,
+        "taste": 10.0, "deepswe_pass_rate": 69.0, "deepswe_avg_cost_usd": 9.18,
+    },
+    "terra": {
+        "engine": "codex", "model": "gpt-5.6-terra", "effort": "max",
+        "manual_approval_required": False, "cost": 4.3, "intelligence": 6.0,
+        "taste": 6.5, "deepswe_pass_rate": 70.0, "deepswe_avg_cost_usd": 3.96,
     },
 }
 CLAUDE_SAFE_MODE_MIN_VERSION = (2, 1, 169)
@@ -1103,6 +1095,95 @@ SCHEMA: dict[str, Any] = {
         "overall_confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
 }
+
+
+@functools.lru_cache(maxsize=1)
+def shared_model_policy() -> Any:
+    """Load the trusted sibling skill independently of the reviewed repository."""
+    path = Path(__file__).resolve().parents[2] / "model-selection" / "scripts" / "model_policy.py"
+    try:
+        for dependency in (path, path.parents[1] / "data" / "catalog.json", path.parents[1] / "data" / "policy.json"):
+            if not dependency.is_file():
+                raise FileNotFoundError(dependency)
+        spec = importlib.util.spec_from_file_location("autoreview_model_policy", path)
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot load model policy")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ImportError) as error:
+        raise SystemExit(
+            "autoreview model policy is unavailable; install model-selection beside "
+            "autoreview from agentstation/skills, then retry "
+            f"(required: {path})"
+        ) from error
+
+
+def resolve_reviewer_assignment(
+    model: str | None,
+    effort: str | None,
+    *,
+    engine: str,
+    allow_unknown: bool,
+) -> dict[str, Any]:
+    policy = shared_model_policy()
+    assignment = policy.validate_assignment(
+        model or "",
+        effort,
+        role="reviewer",
+        allow_unknown=allow_unknown and engine not in {"codex", "claude"},
+    )
+    if not assignment.get("external_catalog", False):
+        if not THINKING_LEVELS_BY_ENGINE[engine]:
+            raise policy.PolicyError(f"{engine} cannot establish the effort for a known catalog pair")
+        if not effort:
+            raise policy.PolicyError("a known catalog reviewer requires an explicit supported effort")
+        provider, separator, _leaf = str(model).rpartition("/")
+        if engine == "opencode" and (not separator or not provider):
+            raise policy.PolicyError("OpenCode requires an explicit provider/model for a known catalog pair")
+        runtime_model = (
+            f"{provider}/{assignment['model']}"
+            if engine in {"opencode", "pi"} and separator
+            else assignment["model"]
+        )
+    else:
+        runtime_model = assignment["model"]
+    return {**assignment, "runtime_model": runtime_model}
+
+
+def candidate_assignment_error(
+    candidate: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    allow_unknown: bool,
+) -> str | None:
+    engine = normalize_engine(candidate["engine"])
+    effort = candidate.get("effort") or DEFAULT_THINKING_BY_ENGINE.get(engine)
+    models = [candidate.get("model") or DEFAULT_MODEL_BY_ENGINE.get(engine)]
+    if candidate.get("fallback_model"):
+        models.extend(item.strip() for item in str(candidate["fallback_model"]).split(","))
+    for model in models:
+        try:
+            assignment = resolve_reviewer_assignment(
+                model, effort, engine=engine, allow_unknown=allow_unknown,
+            )
+        except ValueError as error:
+            return str(error)
+        if anthropic_effort_exceeds_cap(engine, assignment["model"], effort, config["policy"]):
+            return "Claude effort exceeds the configured autoreview cap"
+    return None
+
+
+def anthropic_effort_exceeds_cap(
+    engine: str,
+    model: str | None,
+    effort: str | None,
+    policy: dict[str, Any],
+) -> bool:
+    model = str(model or "").casefold()
+    is_anthropic = engine == "claude" or "claude" in model or model.startswith("anthropic/")
+    maximum = str(policy.get("anthropic_max_effort", "high"))
+    return bool(is_anthropic and effort and EFFORT_ORDER[effort] > EFFORT_ORDER[maximum])
 
 
 def model_is_fable(model: object) -> bool:
@@ -10048,6 +10129,10 @@ def review_attestation_key(
     contract = {
         "version": REVIEW_ATTESTATION_CACHE_VERSION,
         "helper_sha256": helper_digest,
+        "model_policy_sha256": {
+            name: hashlib.sha256((Path(shared_model_policy().__file__).resolve().parents[1] / name).read_bytes()).hexdigest()
+            for name in ("scripts/model_policy.py", "data/catalog.json", "data/policy.json")
+        },
         "base_commit": base_commit,
         "substantive_diff_sha256": diff_digest,
         "substantive_paths": sorted(substantive_paths),
@@ -13643,6 +13728,26 @@ def deep_merge_review_config(
     return merged
 
 
+def merge_legacy_review_config(
+    config: dict[str, Any],
+    overlay: dict[str, Any],
+) -> dict[str, Any]:
+    """Complete removed schema v1 identities without restoring eligibility."""
+    candidates = overlay.get("candidates", {})
+    profiles = overlay.get("profiles", {})
+    referenced = set(candidates) if isinstance(candidates, dict) else set()
+    for profile in profiles.values() if isinstance(profiles, dict) else ():
+        if isinstance(profile, dict) and isinstance(profile.get("candidates"), list):
+            referenced.update(item for item in profile["candidates"] if isinstance(item, str))
+    missing = {
+        name: candidate
+        for name, candidate in LEGACY_REVIEW_CANDIDATES.items()
+        if name in referenced and name not in config["candidates"]
+    }
+    config = deep_merge_review_config(config, {"candidates": missing})
+    return deep_merge_review_config(config, overlay)
+
+
 def read_review_config(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_bytes()
@@ -13686,7 +13791,7 @@ def load_review_config(
             if path in [Path(value).expanduser() for value in args.config or []]:
                 raise SystemExit(f"explicit autoreview config does not exist: {path}")
             continue
-        config = deep_merge_review_config(config, read_review_config(path))
+        config = merge_legacy_review_config(config, read_review_config(path))
         loaded.append(path.resolve())
     validate_review_config(config)
     return config, loaded
@@ -13760,11 +13865,6 @@ def validate_review_config(config: dict[str, Any]) -> None:
         ):
             raise SystemExit(
                 f"candidate {name!r} deepswe_avg_cost_usd must be non-negative"
-            )
-        if model_is_fable(model) and not candidate_requires_manual_approval(candidate):
-            raise SystemExit(
-                f"candidate {name!r} uses Fable and must set "
-                "manual_approval_required = true"
             )
     for name, profile in profiles.items():
         if not isinstance(profile, dict):
@@ -14188,6 +14288,8 @@ def scored_candidates(
             continue
         if candidate_engine not in SAFE_AUTOMATIC_ENGINES:
             continue
+        if candidate_assignment_error(candidate, config, allow_unknown=False):
+            continue
         if engine_binary(args, candidate_engine) is None:
             continue
         if (
@@ -14251,6 +14353,8 @@ def missing_scored_candidate_engines(
         candidate = copy.deepcopy(raw_candidate)
         engine = normalize_engine(str(candidate.get("engine", "")))
         candidate["engine"] = engine
+        if candidate_assignment_error(candidate, config, allow_unknown=False):
+            continue
         if (
             engine not in SAFE_AUTOMATIC_ENGINES
             or engine not in INSTALLABLE_ENGINES
@@ -14346,6 +14450,8 @@ def select_profile_candidates(
     for candidate_name in profile["candidates"]:
         candidate = copy.deepcopy(config["candidates"][candidate_name])
         candidate["engine"] = normalize_engine(candidate["engine"])
+        if error := candidate_assignment_error(candidate, config, allow_unknown=True):
+            raise SystemExit(f"candidate {candidate_name!r} violates reviewer model policy: {error}")
         if candidate_requires_manual_approval(candidate) and not profile_explicit:
             raise SystemExit(
                 f"candidate {candidate_name!r} requires manual approval; approve "
@@ -14369,39 +14475,6 @@ def select_profile_candidates(
                 )
         selected.append((candidate_name, candidate, candidate_score(candidate)))
     return selected
-
-
-def explicit_fable_approval(
-    args: argparse.Namespace,
-    selected: list[tuple[str, dict[str, Any], float]],
-) -> bool:
-    if getattr(args, "cli_profile_explicit", False) and any(
-        model_is_fable(item[1].get("model"))
-        for item in selected
-    ):
-        return True
-
-    if getattr(args, "cli_model_explicit", False):
-        global_model, models_by_engine = parse_keyed_options(args.model, "model")
-        if any(
-            model_is_fable(model)
-            for model in [global_model, *models_by_engine.values()]
-        ):
-            return True
-
-    if getattr(args, "cli_reviewers_explicit", False):
-        tokens = [
-            token.strip()
-            for token in str(args.reviewers or "").split(",")
-            if token.strip()
-        ]
-        if tokens != ["all"]:
-            for token in tokens:
-                _engine, inline_model, _thinking = parse_reviewer_token(token)
-                if model_is_fable(inline_model):
-                    return True
-
-    return False
 
 
 def configure_reviewers(
@@ -14459,7 +14532,6 @@ def configure_reviewers(
     args.selection_scores = {item[0]: item[2] for item in selected}
     args.review_policy = config["policy"]
     args.review_automation = config["automation"]
-    args.fable_explicit = explicit_fable_approval(args, selected)
     return loaded_paths, profile_name
 
 
@@ -14843,41 +14915,36 @@ def enforce_reviewer_policy(
     reviewers: list[argparse.Namespace],
     args: argparse.Namespace,
 ) -> None:
-    """Enforce cost guardrails without closing the review harness ecosystem."""
-    policy = getattr(
-        args,
-        "review_policy",
-        BUILTIN_REVIEW_CONFIG["policy"],
-    )
-    anthropic_max = str(policy.get("anthropic_max_effort", "high"))
-    anthropic_max_rank = EFFORT_ORDER[anthropic_max]
+    """Validate each final reviewer and fallback against the shared role policy."""
+    policy = getattr(args, "review_policy", BUILTIN_REVIEW_CONFIG["policy"])
     for reviewer in reviewers:
-        model = str(reviewer.model or "")
-        if model_is_fable(model) and not getattr(args, "fable_explicit", False):
-            raise SystemExit(
-                "Fable requires manual approval because its credits are scarce; "
-                "approve it with --profile fable or an explicit --model/--reviewers "
-                "value"
+        models = [(reviewer.model, "reviewer")]
+        if reviewer.fallback_model:
+            models.extend(
+                (model.strip(), "fallback")
+                for model in str(reviewer.fallback_model).split(",")
             )
-        fallback_models = str(reviewer.fallback_model or "").split(",")
-        if any(model_is_fable(fallback) for fallback in fallback_models):
-            raise SystemExit(
-                "Fable cannot be a fallback model because fallback invocation is automatic"
-            )
-        is_anthropic_model = (
-            reviewer.engine == "claude"
-            or "claude" in model.lower()
-            or model.lower().startswith("anthropic/")
-        )
-        if (
-            is_anthropic_model
-            and reviewer.thinking
-            and EFFORT_ORDER[reviewer.thinking] > anthropic_max_rank
-        ):
-            raise SystemExit(
-                f"Claude effort {reviewer.thinking!r} exceeds the configured "
-                f"autoreview cap {anthropic_max!r}"
-            )
+        normalized = []
+        for model, source in models:
+            try:
+                assignment = resolve_reviewer_assignment(
+                    model,
+                    reviewer.thinking,
+                    engine=reviewer.engine,
+                    allow_unknown=True,
+                )
+            except ValueError as error:
+                raise SystemExit(f"{source} model violates reviewer model policy: {error}") from error
+            normalized.append(assignment["runtime_model"])
+            if anthropic_effort_exceeds_cap(reviewer.engine, assignment["model"], reviewer.thinking, policy):
+                maximum = policy.get("anthropic_max_effort", "high")
+                raise SystemExit(
+                    f"Claude effort {reviewer.thinking!r} exceeds the configured "
+                    f"autoreview cap {maximum!r}"
+                )
+        reviewer.model = normalized[0]
+        if reviewer.fallback_model:
+            reviewer.fallback_model = ",".join(normalized[1:])
 
 
 def reviewer_label(args: argparse.Namespace) -> str:
@@ -15399,13 +15466,14 @@ def self_test_config_defaults() -> None:
                 reviewer_args(
                     reviewer_test_args(
                         engine="codex",
-                        model=["gpt-5.6-terra"],
+                        model=["gpt-6-luna"],
                     )
                 )[0],
                 reviewer_args(
                     reviewer_test_args(
                         engine="pi",
                         model=["anthropic/claude-opus-5-5"],
+                        thinking=["high"],
                     )
                 )[0],
             ],
@@ -15423,10 +15491,16 @@ def self_test_config_defaults() -> None:
                 "self-test config defaults failed: implicit Fable accepted"
             )
         except SystemExit as error:
-            if "manual approval" not in str(error):
+            if "model policy" not in str(error):
                 raise
         policy_args.fable_explicit = True
-        enforce_reviewer_policy([fable], policy_args)
+        try:
+            enforce_reviewer_policy([fable], policy_args)
+        except SystemExit as error:
+            if "model policy" not in str(error):
+                raise
+        else:
+            raise SystemExit("self-test config defaults failed: explicit Fable accepted")
         claude_xhigh = reviewer_args(
             reviewer_test_args(
                 engine="claude",
@@ -15746,9 +15820,9 @@ def main_impl() -> int:
             )
         target_mode = "branch"
     reviewers = reviewer_args(args)
+    enforce_reviewer_policy(reviewers, args)
     if not args.dry_run:
         ensure_reviewer_harnesses(args, reviewers)
-    enforce_reviewer_policy(reviewers, args)
     reject_repo_output_paths(args, repo)
     target, target_ref = choose_target(repo, target_mode, args.base)
     changed_paths: set[str] = set()

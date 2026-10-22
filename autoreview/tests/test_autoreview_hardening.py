@@ -167,10 +167,10 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 profile_explicit=True,
             )
 
-        self.assertEqual(value[0][0], "terra")
-        self.assertEqual(value[0][1]["effort"], "max")
-        self.assertEqual(value[0][1]["deepswe_pass_rate"], 70)
-        self.assertEqual(value[0][1]["deepswe_avg_cost_usd"], 3.96)
+        self.assertEqual(value[0][0], "sol")
+        self.assertEqual(value[0][1]["effort"], "high")
+        self.assertEqual(value[0][1]["deepswe_pass_rate"], 75.2)
+        self.assertEqual(value[0][1]["deepswe_avg_cost_usd"], 1.05)
         self.assertEqual(budget[0][0], "luna")
         self.assertEqual(budget[0][1]["effort"], "max")
         self.assertEqual(budget[0][1]["deepswe_pass_rate"], 67)
@@ -182,138 +182,24 @@ class AutoreviewHardeningTests(unittest.TestCase):
 
         self.assertNotIn("opus48", candidates)
         self.assertNotIn("sonnet5", candidates)
-        self.assertEqual(candidates["fable5"]["intelligence"], 10)
+        self.assertNotIn("fable5", candidates)
         self.assertEqual(candidates["sol"]["intelligence"], 7.5)
         self.assertEqual(candidates["opus5"]["intelligence"], 9.0)
-        self.assertEqual(candidates["fable5"]["taste"], 10.0)
         self.assertEqual(candidates["sol"]["taste"], 7.0)
         self.assertEqual(candidates["opus5"]["taste"], 9)
-        self.assertEqual(candidates["terra"]["taste"], 6.5)
+        self.assertNotIn("terra", candidates)
         self.assertEqual(candidates["luna"]["taste"], 5.5)
         for candidate in candidates.values():
             if candidate["engine"] == "claude":
                 self.assertNotIn(candidate["effort"], {"xhigh", "max"})
 
-    def test_fable_profile_requires_manual_approval(self) -> None:
-        config = self.helper["deep_merge_review_config"](
-            self.helper["BUILTIN_REVIEW_CONFIG"],
-            {},
-        )
-        args = argparse.Namespace(
-            codex_bin="codex",
-            claude_bin="claude",
-            pi_bin="pi",
-        )
-        globals_dict = self.helper["select_profile_candidates"].__globals__
-        with mock.patch.dict(
-            globals_dict,
-            {"engine_binary": lambda _args, engine: f"/trusted/{engine}"},
-        ):
-            with self.assertRaisesRegex(SystemExit, "manual approval"):
+    def test_builtin_fable_profile_is_unavailable(self) -> None:
+        config = self.helper["BUILTIN_REVIEW_CONFIG"]
+        for explicit in (False, True):
+            with self.subTest(explicit=explicit), self.assertRaisesRegex(SystemExit, "unknown autoreview profile"):
                 self.helper["select_profile_candidates"](
-                    config,
-                    args,
-                    "fable",
-                    profile_explicit=False,
+                    config, argparse.Namespace(), "fable", profile_explicit=explicit,
                 )
-            selected = self.helper["select_profile_candidates"](
-                config,
-                args,
-                "fable",
-                profile_explicit=True,
-            )
-
-        self.assertEqual([item[0] for item in selected], ["fable5"])
-
-    def test_fable_approval_accepts_only_explicit_fable_selectors(self) -> None:
-        candidate = self.helper["BUILTIN_REVIEW_CONFIG"]["candidates"]["fable5"]
-        selected = [
-            (
-                "fable5",
-                candidate,
-                self.helper["candidate_score"](candidate),
-            )
-        ]
-        base = {
-            "cli_profile_explicit": False,
-            "cli_model_explicit": False,
-            "cli_reviewers_explicit": False,
-            "model": None,
-            "reviewers": None,
-        }
-
-        with mock.patch.object(
-            sys,
-            "argv",
-            [
-                "autoreview",
-                "--prompt",
-                "mention fable without selecting it",
-                "--config",
-                "fable-policy.toml",
-            ],
-        ):
-            self.assertFalse(
-                self.helper["explicit_fable_approval"](
-                    argparse.Namespace(**base),
-                    selected,
-                )
-            )
-        self.assertFalse(
-            self.helper["explicit_fable_approval"](
-                argparse.Namespace(
-                    **{
-                        **base,
-                        "cli_model_explicit": True,
-                        "model": ["claude=claude-opus-5"],
-                    }
-                ),
-                selected,
-            )
-        )
-        self.assertFalse(
-            self.helper["explicit_fable_approval"](
-                argparse.Namespace(
-                    **{
-                        **base,
-                        "cli_reviewers_explicit": True,
-                        "reviewers": "claude",
-                    }
-                ),
-                selected,
-            )
-        )
-
-        self.assertTrue(
-            self.helper["explicit_fable_approval"](
-                argparse.Namespace(**{**base, "cli_profile_explicit": True}),
-                selected,
-            )
-        )
-        self.assertTrue(
-            self.helper["explicit_fable_approval"](
-                argparse.Namespace(
-                    **{
-                        **base,
-                        "cli_model_explicit": True,
-                        "model": ["claude=claude-fable-5"],
-                    }
-                ),
-                [],
-            )
-        )
-        self.assertTrue(
-            self.helper["explicit_fable_approval"](
-                argparse.Namespace(
-                    **{
-                        **base,
-                        "cli_reviewers_explicit": True,
-                        "reviewers": "claude:claude-fable-5:high",
-                    }
-                ),
-                [],
-            )
-        )
 
     def test_lower_literal_cost_scores_higher(self) -> None:
         candidate = {
@@ -336,7 +222,11 @@ class AutoreviewHardeningTests(unittest.TestCase):
             self.helper["BUILTIN_REVIEW_CONFIG"],
             {
                 "candidates": {
-                    "fable5": {
+                    "manually-gated": {
+                        "engine": "claude",
+                        "model": "claude-opus-5-5",
+                        "effort": "high",
+                        "manual_approval_required": True,
                         "cost": 0,
                         "intelligence": 10,
                         "taste": 10,
@@ -374,7 +264,7 @@ class AutoreviewHardeningTests(unittest.TestCase):
         )
         reviewer = argparse.Namespace(
             engine="pi",
-            model="anthropic/claude-opus-5",
+            model="anthropic/claude-opus-5-5",
             thinking="xhigh",
             fallback_model=None,
         )
@@ -389,12 +279,12 @@ class AutoreviewHardeningTests(unittest.TestCase):
         )
         reviewer = argparse.Namespace(
             engine="claude",
-            model="claude-opus-5",
+            model="claude-opus-5-5",
             thinking="high",
-            fallback_model="claude-opus-4-8,claude-fable-5",
+            fallback_model="claude-opus-5-5,claude-fable-5-1",
         )
 
-        with self.assertRaisesRegex(SystemExit, "cannot be a fallback"):
+        with self.assertRaisesRegex(SystemExit, "fallback model violates reviewer model policy"):
             self.helper["enforce_reviewer_policy"]([reviewer], args)
 
     def test_substantive_code_classifier_skips_docs_config_and_locks(self) -> None:
@@ -2000,10 +1890,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
             rows[(cells[0], cells[7])] = cells
 
         expected_rows = {
-            ("Fable 5.1", "high"),
             ("GPT-6.1 Sol", "high"),
             ("Opus 5.5", "high"),
-            ("GPT-5.6 Terra", "max"),
             ("GPT-6 Luna", "max"),
         }
         self.assertEqual(set(rows), expected_rows)
@@ -9347,7 +9235,7 @@ class AutoreviewHardeningTests(unittest.TestCase):
             repo = init_repo(root)
 
             result = subprocess.run(
-                [sys.executable, str(SCRIPT), "--mode", "local", "--engine", "droid", "--dry-run"],
+                [sys.executable, str(SCRIPT), "--mode", "local", "--engine", "droid", "--model", "kimi-k3", "--thinking", "high", "--dry-run"],
                 cwd=repo,
                 text=True,
                 capture_output=True,
@@ -9490,6 +9378,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "pi",
+                    "--model",
+                    "kimi-k3",
                     "--pi-bin",
                     str(pi_bin),
                     "--dry-run",
@@ -9528,6 +9418,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "pi",
+                    "--model",
+                    "kimi-k3",
                     "--pi-bin",
                     str(pi_bin),
                     "--dry-run",
@@ -9568,6 +9460,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--dry-run",
@@ -9612,6 +9506,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--dry-run",
@@ -9655,6 +9551,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--dry-run",
@@ -9710,6 +9608,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--dry-run",
@@ -9763,6 +9663,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--dry-run",
@@ -9815,6 +9717,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--dry-run",
@@ -9915,6 +9819,8 @@ class AutoreviewHardeningTests(unittest.TestCase):
                     "local",
                     "--engine",
                     "kimi",
+                    "--model",
+                    "kimi-k3",
                     "--kimi-bin",
                     str(kimi_bin),
                     "--prompt-file",

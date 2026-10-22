@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "policy_version": 2,
+  "blocked_families": [
+    "haiku"
+  ],
+  "coordinator_only": [
+    "fable"
+  ],
+  "focused_specialist_only": [
+    "astra"
+  ],
+  "ultracode_for_coordination_or_high_complexity": [
+    "opus"
+  ],
+  "taste": {
+    "gpt-6-luna": 5.5,
+    "gpt-6-1-sol": 7,
+    "claude-opus-5-5": 9,
+    "claude-sonnet-5-5": 7,
+    "claude-fable-5-1": 10,
+    "gpt-6-astra": 8
+  },
+  "aliases": {
+    "luna": "gpt-6-luna",
+    "sol": "gpt-6-1-sol",
+    "opus": "claude-opus-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "fable": "claude-fable-5-1",
+    "astra": "gpt-6-astra",
+    "gpt-6.1-sol": "gpt-6-1-sol"
+  },
+  "default_efforts": {
+    "gpt-6-luna": "high",
+    "gpt-6-1-sol": "high",
+    "claude-opus-5-5": "high",
+    "claude-sonnet-5-5": "max",
+    "claude-fable-5-1": "high",
+    "gpt-6-astra": "high"
+  },
+  "runtime_models": {
+    "gpt-6-1-sol": "gpt-6.1-sol"
+  }
+}

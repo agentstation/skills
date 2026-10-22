@@ -13,8 +13,8 @@ a branch, reapplying these local changes, and running the complete test suite.
 
 Local divergences to reapply on import:
 
-- AgentStation owns the scored profile, model, effort, Fable approval, and
-  harness installation policy.
+- AgentStation owns scored profiles and harness installation policy. Shared
+  model-selection policy governs reviewer roles, efforts, and frontier pairs.
 - AgentStation keeps runnable, isolated OpenCode and Cursor adapters. Upstream
   fails those engines closed.
 - AgentStation reuses a recent clean pre-PR result when the exact substantive
@@ -38,6 +38,6 @@ Local divergences to reapply on import:
 - Committed branch and commit reviews decode regular `.json.gz` files before
   review and secret scanning. Input limits are 8 MiB compressed, 32 MiB decoded,
   64 MiB formatted, 64 nesting levels, and sixteen files per target. Only one
-  gzip member with no optional header fields is accepted. JSON tokens and key
+  gzip member with no optional header fields passes validation. JSON tokens and key
   order stay unchanged. Git object IDs and file metadata remain in the diff.
   Local binary review and other binary formats still fail closed.

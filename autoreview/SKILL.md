@@ -68,17 +68,23 @@ the current host agent. The built-in profiles are:
 "$AUTOREVIEW" --profile cross-lab
 "$AUTOREVIEW" --profile value
 "$AUTOREVIEW" --profile budget
-"$AUTOREVIEW" --profile fable
 ```
 
-Opus 5.5 high is the default Claude-side code reviewer. Fable requires manual
-approval through an explicit CLI profile, model, or reviewer request. Reserve it
-for architecture-sensitive or exceptionally complex change review. Fable is
-never selected automatically, approved by config or environment defaults, or
-used as a fallback. Built-in Claude policy caps effort at `high`. A config can
-consciously change that cap.
+Opus 5.5 high is the default Claude-side code reviewer. The built-in `value`
+profile selects Sol high. Shared model-selection policy version 2 checks every
+reviewer and fallback, including explicit requests.
 
-Config can register other supported models and harnesses as candidates.
+Fable only coordinates work.
+Astra only handles focused specialist tasks with high complexity. Neither can
+review through this helper. Policy always prohibits Haiku.
+
+Built-in Claude policy caps effort at `high`. A configured higher cap must
+still use an approved model and effort pair. Config schema `version = 1`
+remains valid. Install the sibling model-selection skill with autoreview.
+
+Config can register supported models and harnesses as candidates. Automatic
+selection checks the shared frontier before score ranking. External adapters
+require an explicit concrete model name for third-provider catalog models.
 
 The helper also supports Kimi Code, OpenCode, and Cursor Agent when their CLIs
 exist:

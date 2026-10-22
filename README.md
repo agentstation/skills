@@ -8,6 +8,8 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 |---|---|---|
 | `goago` | Runs and remediates the goago restriction-only Go linter. | [goago/README.md](goago/README.md) |
 | `use-modern-go` | Applies target-version modern Go guidance and active goago policy to Go changes and reviews. | [use-modern-go/README.md](use-modern-go/README.md) |
+| `model-selection` | Validates model roles and effort against the dated Pareto frontier. | [model-selection/README.md](model-selection/README.md) |
+| `codex-delegation` | Dispatches scoped Codex work through the native host interface. | [codex-delegation/README.md](codex-delegation/README.md) |
 | `autoreview` | Runs an isolated second-model code review at a pre-PR gate or a configured checkpoint. | [autoreview/README.md](autoreview/README.md) |
 | `plans` | Keeps a durable plan that owns one outcome, with a status ledger, verifiable task criteria, and autonomous execution. | [plans/README.md](plans/README.md) |
 | `technical-writing` | Applies controlled, lintable writing rules to developer-facing prose. | [technical-writing/README.md](technical-writing/README.md) |
@@ -21,6 +23,8 @@ Each skill installs into the shared `~/.agents/skills` directory:
 npx skills add agentstation/skills --skill goago -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill use-modern-go -g \
   -a codex -a claude-code -y
+npx skills add agentstation/skills --skill model-selection -g -a codex -a claude-code -y
+npx skills add agentstation/skills --skill codex-delegation -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill technical-writing -g \
@@ -44,6 +48,11 @@ reproducibility matters.
 Install from the GitHub source shown above for normal use. A local-path
 install helps during development, but it records no updateable GitHub source
 metadata.
+
+Install `model-selection` before `autoreview` or `codex-delegation`.
+Project adapters keep local criteria and call the shared skills.
+Model policy version 2 removes Fable review eligibility, including explicit profiles.
+See [the migration contract](model-selection/references/integration.md).
 
 ## Make a skill unconditional
 

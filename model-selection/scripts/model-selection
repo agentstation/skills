@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Inspect the shared model catalog and validate assignments."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from model_policy import (PolicyError, check_global_instructions, frontier,
+                          render_table, select_assignment, validate_assignment)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='command', required=True)
+    for command in ['check', 'select']:
+        child = commands.add_parser(command)
+        child.add_argument('--role', choices=['worker','reviewer','coordinator','specialist'], default='worker')
+        child.add_argument('--complexity', choices=['routine','high'], default='routine')
+        child.add_argument('--focused', action='store_true')
+        child.add_argument('--ultracode', action='store_true')
+        if command == 'check':
+            child.add_argument('--model', required=True)
+            child.add_argument('--effort', required=True)
+        else:
+            child.add_argument('--task', choices=['mechanical','simple','implementation','design','browser'], default='implementation')
+            child.add_argument('--available-json', type=Path)
+            child.add_argument('--min-intelligence', type=float)
+            child.add_argument('--min-taste', type=float)
+    commands.add_parser('frontier')
+    table = commands.add_parser('table')
+    table.add_argument('--check', type=Path)
+    args = parser.parse_args()
+    try:
+        if args.command == 'table':
+            if args.check:
+                check_global_instructions(args.check)
+                print(json.dumps({'valid': True, 'path':str(args.check)}))
+            else:
+                print(render_table(), end='')
+            return 0
+        if args.command == 'frontier':
+            result = frontier()
+        elif args.command == 'check':
+            result = validate_assignment(args.model, args.effort, role=args.role,
+                                         complexity=args.complexity, focused=args.focused, ultracode=args.ultracode)
+        else:
+            available = json.loads(args.available_json.read_text()) if args.available_json else None
+            result = select_assignment(task=args.task, role=args.role, complexity=args.complexity,
+                                       focused=args.focused, ultracode=args.ultracode, available=available,
+                                       min_intelligence=args.min_intelligence, min_taste=args.min_taste)
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    except (PolicyError, OSError, ValueError) as exc:
+        print(json.dumps({'error':'model_policy_violation','message':str(exc)}), file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

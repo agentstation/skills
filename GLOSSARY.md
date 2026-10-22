@@ -39,3 +39,7 @@
 | strict mode | The technical-writing mode for procedures, runbooks, safety text, and controlled errors. | strict-mode | Approved | `technical-writing/SKILL.md` |
 | technical writing | Developer-facing prose that explains technical behavior or guides a technical task. | | Approved | `technical-writing/SKILL.md` |
 | technical-writing | The skill identifier for the AgentStation technical-writing system. | | Approved | `technical-writing/SKILL.md` |
+| model-selection | The shared skill that owns model eligibility, role limits, and benchmark evidence. | | Approved | `model-selection/SKILL.md` |
+| codex-delegation | The skill that dispatches scoped Codex work through native host interfaces. | | Approved | `codex-delegation/SKILL.md` |
+| Pareto frontier | Model and effort pairs for which no compared pair has at most the same cost and at least the same intelligence, with one strict advantage. | | Approved | `model-selection/references/selection.md` |
+| Ultracode | The multi-agent feature required for Opus coordination or highly complex work under the owner policy. | | Approved | `model-selection/SKILL.md` |
