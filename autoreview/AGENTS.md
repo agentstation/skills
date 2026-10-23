@@ -7,10 +7,10 @@
 - Keep repository-specific criteria and named project profiles in their owning
   repositories.
 - Invoke this helper with explicit criteria from those repositories.
-- Keep Fable behind manual approval and unavailable to automatic selection or
-  fallback.
-- Reserve Fable for manually requested review of architecture-sensitive or
-  exceptionally complex changes.
+- Enforce the canonical sibling model-selection policy for reviewers and fallbacks.
+- Keep Fable coordinator-only, Astra specialist-only, and Haiku prohibited.
+- Check frontier eligibility before ranking candidates or installing harnesses.
+- Keep external adapters explicit and require concrete model identities.
 - Keep Opus 5.5 high as the default Claude-side code reviewer.
 - Keep built-in Claude effort at or below `high`.
 - Require conscious configuration for higher caps.

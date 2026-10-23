@@ -1,0 +1,223 @@
+{
+  "skill_name": "codex-delegation",
+  "evals": [
+    {
+      "id": "parser-investigation",
+      "category": "handoff",
+      "should_trigger": true,
+      "prompt": "Ask Codex to investigate the parser regression in /work/compiler. Do not edit files. I need the failing input, likely cause, and a command that reproduces it.",
+      "expected_output": "A read-only Codex assignment with explicit evidence and scope.",
+      "assertions": [
+        "Select a supported model and effort before dispatch.",
+        "Preserve the prohibition on edits."
+      ]
+    },
+    {
+      "id": "independent-migration",
+      "category": "handoff",
+      "should_trigger": true,
+      "prompt": "Delegate the CSV import migration to Codex in its own worktree. It may change importer/** and its tests. Keep the public schema stable and report the checks.",
+      "expected_output": "A bounded worker assignment with parent verification.",
+      "assertions": [
+        "Keep allowed files and public behavior in the assignment.",
+        "The parent owns verification and commits."
+      ]
+    },
+    {
+      "id": "long-task-file",
+      "category": "handoff",
+      "should_trigger": true,
+      "prompt": "I wrote the full index rebuild task in /work/notes/rebuild-task.md. Have Codex read it first and implement only its accepted scope in /work/search.",
+      "expected_output": "A native handoff that points to the task file.",
+      "assertions": [
+        "Use the native delegation path.",
+        "Do not expand the task beyond its accepted scope."
+      ]
+    },
+    {
+      "id": "job-status",
+      "category": "background",
+      "should_trigger": true,
+      "prompt": "The Codex background job task-7d31 is still quiet after the test run started. Check its real status and retrieve its result if it finished. Do not start it again.",
+      "expected_output": "A status query for the existing job.",
+      "assertions": [
+        "Do not infer completion or failure from elapsed time.",
+        "Do not create a liaison or duplicate job."
+      ]
+    },
+    {
+      "id": "job-cancel",
+      "category": "background",
+      "should_trigger": true,
+      "prompt": "Cancel Codex job task-c08f for /work/renderer. We changed the accepted design. Preserve any work already in its worktree so I can inspect it.",
+      "expected_output": "Cancellation through the existing native job interface.",
+      "assertions": [
+        "Use the specified job identifier.",
+        "Preserve existing changes."
+      ]
+    },
+    {
+      "id": "resume-worker",
+      "category": "background",
+      "should_trigger": true,
+      "prompt": "Continue the last Codex rescue job in /work/queue. Apply the retry fix from its prior result and run the queue tests. Keep the API stable.",
+      "expected_output": "An authorized continuation through the supported resume interface.",
+      "assertions": [
+        "Use the existing rescue job.",
+        "Keep the API constraint and required tests."
+      ]
+    },
+    {
+      "id": "browser-job",
+      "category": "browser",
+      "should_trigger": true,
+      "prompt": "Have Codex reproduce the broken sign-in flow at our staging site in the browser. Collect the error and network evidence, but do not change account settings.",
+      "expected_output": "A browser assignment that inherits the owner's existing site permissions.",
+      "assertions": [
+        "Do not require a per-task site list or a saved entry for each origin.",
+        "Use the owner's existing browser permissions and report actual runtime access failures.",
+        "Preserve the prohibition on account changes."
+      ]
+    },
+    {
+      "id": "challenge-plugin",
+      "category": "review",
+      "should_trigger": true,
+      "prompt": "Ask Codex for an adversarial review of this branch against main. Focus on retry races and data loss. Report findings only, without fixes.",
+      "expected_output": "A read-only native adversarial review.",
+      "assertions": [
+        "Use the native review interface.",
+        "Do not treat the request as permission for fixes."
+      ]
+    },
+    {
+      "id": "unavailable-effort",
+      "category": "authority",
+      "should_trigger": true,
+      "prompt": "Delegate the cache refactor to Codex with gpt-6.1-sol at max effort. Check whether this installed plugin accepts max before you launch it.",
+      "expected_output": "A host capability check before the assignment.",
+      "assertions": [
+        "Do not silently lower effort.",
+        "Report a host limitation if the pair cannot be expressed."
+      ]
+    },
+    {
+      "id": "fallback-request",
+      "category": "handoff",
+      "should_trigger": true,
+      "prompt": "The native Codex plugin cannot express this task on this host. Prepare a direct companion call for /work/lexer using /work/tasks/lexer.md, without a new launcher.",
+      "expected_output": "A constrained companion fallback after verifying the limitation.",
+      "assertions": [
+        "Use one unpiped command line under 10,000 characters.",
+        "Pass --cwd and preserve the task-file instruction."
+      ]
+    },
+    {
+      "id": "local-fix",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "Fix the CSV parser in this worktree and run its tests. I have already isolated the failing input in fixtures/quotes.csv. Keep the change small.",
+      "expected_output": "Local implementation without Codex delegation.",
+      "assertions": [
+        "Do not invoke the delegation skill solely because this is a coding task."
+      ]
+    },
+    {
+      "id": "model-advice",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "Compare the current model options for routine extraction and explain which effort is eligible under our model policy. Do not launch a worker or change settings.",
+      "expected_output": "Model-selection advice without a delegation.",
+      "assertions": [
+        "Use model-selection when available.",
+        "Do not start a Codex job."
+      ]
+    },
+    {
+      "id": "structured-review",
+      "category": "review",
+      "should_trigger": false,
+      "prompt": "Run structured autoreview at the pre-PR gate for this committed branch, using the repository configuration. Do not ask Codex rescue to run another reviewer.",
+      "expected_output": "The autoreview workflow.",
+      "assertions": [
+        "Use autoreview rather than Codex delegation.",
+        "Do not start nested reviewers."
+      ]
+    },
+    {
+      "id": "codex-product-help",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "What does the Codex browser permission file control, and how does it differ from repository write approval? I want an explanation only, without changing anything.",
+      "expected_output": "A product explanation with current supporting evidence.",
+      "assertions": [
+        "Do not dispatch a Codex worker.",
+        "Do not change permissions."
+      ]
+    },
+    {
+      "id": "read-result-file",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "Read /work/reports/codex-result.txt and summarize its findings for me. This is an exported text file from yesterday, and no job is running now.",
+      "expected_output": "A summary of the supplied file.",
+      "assertions": [
+        "Do not query job status.",
+        "Do not restart yesterday’s job."
+      ]
+    },
+    {
+      "id": "generic-agent",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "Use the host’s ordinary subagent to extract the names from /work/input.json. This is a mechanical task, and I do not want a Codex plugin process.",
+      "expected_output": "A supported host subagent assignment if authorized.",
+      "assertions": [
+        "Honor the explicit exclusion of the Codex plugin."
+      ]
+    },
+    {
+      "id": "config-only",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "Update the project Codex config to use the model I selected for future interactive sessions. Show the diff, but do not start a task or change my current session.",
+      "expected_output": "A scoped configuration edit.",
+      "assertions": [
+        "Do not dispatch a worker.",
+        "Do not claim the current model changed."
+      ]
+    },
+    {
+      "id": "pull-request-description",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "Write a short pull request description for the existing Codex integration patch. The implementation and all checks are complete; only the prose needs work.",
+      "expected_output": "Developer prose for the existing patch.",
+      "assertions": [
+        "Use technical-writing guidance.",
+        "Do not launch an implementation job."
+      ]
+    },
+    {
+      "id": "no-external-authority",
+      "category": "authority",
+      "should_trigger": false,
+      "prompt": "Review our release checklist and tell me whether the deployment steps need changes. This is an inspection request only; do not deploy, merge, or delegate.",
+      "expected_output": "An inspection report within explicit limits.",
+      "assertions": [
+        "Do not dispatch a worker.",
+        "Do not deploy or merge."
+      ]
+    },
+    {
+      "id": "ordinary-timeout",
+      "category": "near-miss",
+      "should_trigger": false,
+      "prompt": "The local pytest command timed out after 30 seconds. Inspect the test logs in this worktree and diagnose the timeout. No Codex task is involved.",
+      "expected_output": "Local diagnosis of test evidence.",
+      "assertions": [
+        "Do not treat every timeout as a Codex job-management request."
+      ]
+    }
+  ]
+}

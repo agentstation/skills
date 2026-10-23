@@ -1,0 +1,50 @@
+[
+  {
+    "query": "Choose a model and effort for these 40 independent migration tasks.",
+    "should_trigger": true
+  },
+  {
+    "query": "Refresh our model frontier after the Sonnet release.",
+    "should_trigger": true
+  },
+  {
+    "query": "Why did a Fable reviewer profile fail?",
+    "should_trigger": true
+  },
+  {
+    "query": "Audit my model profiles against the role policy.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which available model should coordinate delivery?",
+    "should_trigger": true
+  },
+  {
+    "query": "Validate Astra for this narrow, difficult protocol proof.",
+    "should_trigger": true
+  },
+  {
+    "query": "Compare saved model effort costs.",
+    "should_trigger": true
+  },
+  {
+    "query": "Fix the code under the already selected Sol high assignment.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a product-model TypeScript class.",
+    "should_trigger": false
+  },
+  {
+    "query": "Run the native Codex plugin with this already validated assignment.",
+    "should_trigger": false
+  },
+  {
+    "query": "Refactor a database model.",
+    "should_trigger": false
+  },
+  {
+    "query": "Deploy the accepted version using the existing release process.",
+    "should_trigger": false
+  }
+]

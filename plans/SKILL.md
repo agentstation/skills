@@ -30,8 +30,10 @@ Markdown is the fallback when the repository requires it.
    the execution loop, the stop states, and closure.
 5. When execution reveals an architecture problem, apply
    [`references/architecture.md`](references/architecture.md).
-6. Write plan prose with the technical-writing skill in developer mode.
-7. Apply [`references/context-budget.md`](references/context-budget.md) when
+6. Before delivery or a release, read
+   [`references/delivery.md`](references/delivery.md) for acceptance, compatibility, and rollout evidence.
+7. Write plan prose with the technical-writing skill in developer mode.
+8. Apply [`references/context-budget.md`](references/context-budget.md) when
    creating or revising resume instructions, or when repeated history crowds current work.
 
 ## Core rules
@@ -55,7 +57,7 @@ Markdown is the fallback when the repository requires it.
 - Keep the plan a thin control plane. Move narrative evidence to the
   proof root. Keep one current resume state, separate from execution history.
 - Repair the pockets of complexity that execution reveals at their owning
-  seams, and route each repair through the ledger.
+  boundaries, and route each repair through the ledger.
 - End every plan with a cleanup task that triggers when its final pull
   request merges. Delete the plan by default, or archive it when the
   repository keeps an archive.

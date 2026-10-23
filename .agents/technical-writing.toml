@@ -130,6 +130,8 @@ scan = [
   "AGENTS.md",
   "ago/**/*.md",
   "autoreview/**/*.md",
+  "model-selection/**/*.md",
+  "codex-delegation/**/*.md",
   "use-modern-go/**/*.md",
   "plans/**/*.md",
   "plans/**/*.html",

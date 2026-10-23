@@ -12,6 +12,7 @@ install, the commands a person runs, and the documents that own each setting.
 
 ```bash
 npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code -y
+npx skills add agentstation/skills --skill model-selection -g -a codex -a claude-code -y
 ```
 
 Set the helper path:
@@ -71,8 +72,13 @@ selects a fixed roster instead:
 "$AUTOREVIEW" --install-harness <name>
 ```
 
-Fable needs an explicit request. It never enters automatic selection or
-fallback.
+Shared policy version 2 checks every reviewer and fallback. Fable only
+coordinates work, and Astra only handles focused specialist tasks. Policy
+prohibits Haiku. Explicit requests cannot bypass those limits. The `value` profile
+now selects Sol high. TOML configuration schema version 1 remains valid.
+
+Install the sibling model-selection skill. External adapters require a concrete
+model name from their catalog.
 
 ## Findings
 

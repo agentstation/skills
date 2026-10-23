@@ -10,7 +10,17 @@ values:
 5. environment and CLI reviewer overrides.
 
 Set `AUTOREVIEW_CONFIG` to replace the default global path. Use `--no-config`
-for a reproducible built-in-only run.
+for a reproducible built-in-only run. Shared model policy still applies.
+
+Policy version 2 is separate from configuration schema `version = 1`.
+The built-in `value` profile now selects Sol high. Remove legacy Terra overrides
+or replace them with approved pairs. Legacy prohibited candidates cannot enter
+automatic selection. Exact selections fail with a policy error.
+
+Legacy score overlays can omit identity fields that old built-ins supplied.
+The loader restores those historical fields only to read the configuration.
+Shared policy still rejects those candidates. Later layers keep their usual
+precedence.
 
 ## Automation
 
@@ -85,6 +95,7 @@ configuration, not another model field.
 `cost` uses a literal 0–10 scale. The scale derives from DeepSWE's average task
 cost at the candidate's configured effort. Zero is free, and 10 is the most
 expensive candidate. Preserve the underlying value in `deepswe_avg_cost_usd`.
+
 Until DeepSWE measures a new model, that value is an estimate: the
 predecessor's DeepSWE cost × the Artificial Analysis cost-per-task ratio at the
 same effort. Lower cost improves the automatic-selection score.
@@ -95,7 +106,11 @@ source data.
 
 The helper's isolation checks govern every supported engine. You can configure
 Codex, Claude, a sufficiently recent Pi CLI, Kimi Code 0.30.0 or newer,
-OpenCode, and Cursor Agent as automatic candidates. The adapters give each
+OpenCode, and Cursor Agent as candidates. Shared frontier checks govern
+scored selection. Explicit third-provider selections need a concrete catalog
+model name.
+
+Policy prohibits unresolved harness defaults. The adapters give each
 reviewer only the frozen prompt bundle. They run from empty workspaces. The
 adapters disable repository, filesystem, shell, edit, plugin, MCP, and
 project-instruction capabilities.
@@ -148,16 +163,21 @@ autoreview --engine opencode --model opencode/glm-5.2 --thinking max
 autoreview --engine opencode --model opencode/grok-4.5 --thinking high
 ```
 
-Model names are deliberately not rewritten by autoreview. Use
+Known catalog aliases normalize to their runtime model identities before invocation.
+Supplied OpenCode and Pi provider namespaces stay unchanged. OpenCode requires
+`provider/model` for known pairs. Concrete third-provider model names stay unchanged. Use
 `opencode models <provider>` for OpenCode and the Cursor model catalog for
 Cursor, because provider and hosted-catalog identifiers can change.
 
-Fable candidates must set `manual_approval_required = true`. An explicit CLI
-selection grants approval only when it names Fable. Valid selections include
-`--profile`, `--model`, and an inline model in `--reviewers`. Scored profiles,
-config defaults, environment defaults, automatic gates, and unrelated arguments
-cannot grant approval. The helper also refuses Fable in fallback chains because
-fallback invocation is automatic.
+The canonical sibling model-selection skill checks every reviewer and fallback.
+Fable only coordinates work. Astra only handles focused specialist tasks with
+high complexity. Neither can review through this helper. Policy prohibits Haiku.
+
+Explicit CLI selections, approval fields, environment defaults, and `--no-config`
+cannot bypass these limits. Known model pairs must pass the shared frontier.
+
+External adapters preserve concrete third-provider model names, but cannot
+bypass reserved-family restrictions.
 
 The helper recognizes the legacy
 `manual_approval`, `explicit_only`, and `automatic = false` fields in older
@@ -176,4 +196,13 @@ Claude inside Claude. Exact CLI selections and explicit profiles are owner
 choices and may select the host engine.
 
 The Anthropic effort cap applies to every Claude reviewer. Raise it only when
-your own evaluations justify the additional spend.
+your own evaluations justify the additional spend. The pair must still pass shared policy.
+
+
+The policy loader uses `model-selection/scripts/model_policy.py` beside the
+installed autoreview skill. It does not accept a policy path from configuration.
+If the dependency does not exist, install both skills from AgentStation and retry.
+
+Known catalog models need an explicit supported effort on external adapters.
+Cursor cannot establish effort for known catalog pairs, so those selections fail.
+Concrete third-provider catalog models remain available through Cursor.
