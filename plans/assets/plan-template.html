@@ -71,6 +71,15 @@
     border: 1px solid var(--muted); border-radius: 3px; }
   [data-seg="todo"] .swatch { background-color: var(--soft); }
   .counts { color: var(--muted); font-size: 0.92rem; margin: 0.4rem 0 0; }
+  /* The percentage, the fraction, and the legend share the title row. */
+  .progress-head { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 0.3rem 1.1rem; margin: 2rem 0 0.6rem; padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--line); }
+  .progress-head h2 { margin: 0; padding: 0; border: 0; }
+  .progress-head .pct { margin-left: 0.35rem; font-variant-numeric:
+    tabular-nums; }
+  .progress-head .frac { color: var(--muted); font-size: 0.88rem; }
+  .progress-head .legend { margin: 0; }
   .pair { display: grid; grid-template-columns: repeat(auto-fit,
     minmax(280px, 1fr)); gap: 1rem; }
   figure { margin: 0; border: 1px solid var(--line); border-radius: 8px;
@@ -108,6 +117,7 @@
   }
 </style>
 <script>
+  // Progress and the plan summary. The status ledger is the source of truth.
   document.addEventListener("DOMContentLoaded", function () {
     // Each bare task status maps to one bar segment.
     var segmentOf = { "done": "done", "in_progress": "in_progress",
@@ -119,15 +129,26 @@
       "removed": "Deferred, no-action, or rejected" };
     var counts = { "done": 0, "in_progress": 0, "blocked": 0, "todo": 0,
       "removed": 0 };
+    function text(node) {
+      return node ? node.textContent.replace(/\s+/g, " ").trim() : "";
+    }
+    function task(row) {
+      return { id: row.id, task: text(row.cells[1]),
+        status: text(row.cells[2]) };
+    }
     var rows = document.querySelectorAll("#ledger tbody tr[data-status]");
-    var total = rows.length, closed = 0, running = [], unknown = [];
+    var total = rows.length, closed = 0;
+    var running = [], blocked = [], unknown = [];
     rows.forEach(function (row) {
       var status = row.getAttribute("data-status").split("(")[0].trim();
-      if (!segmentOf[status]) { unknown.push(row.id); status = "todo"; }
+      if (!segmentOf[status]) { unknown.push(task(row)); status = "todo"; }
       counts[segmentOf[status]] += 1;
       if (terminal[status]) { closed += 1; }
-      if (status === "in_progress") { running.push(row.id); }
+      if (status === "in_progress") { running.push(task(row)); }
+      if (status === "blocked") { blocked.push(task(row)); }
     });
+    // Round down, so 100% means that every row is terminal.
+    var pct = total ? Math.floor((closed / total) * 100) : 0;
     var progress = document.getElementById("progress");
     var summary = [];
     progress.querySelectorAll(".bar > [data-seg]").forEach(function (seg) {
@@ -139,15 +160,67 @@
     progress.querySelectorAll(".legend [data-seg]").forEach(function (item) {
       item.querySelector("b").textContent = counts[item.getAttribute("data-seg")];
     });
-    var pct = total ? Math.round((closed / total) * 100) : 0;
-    var text = closed + " of " + total + " tasks terminal (" + pct + "%).";
-    if (running.length) { text += " In progress: " + running.join(", ") + "."; }
-    if (unknown.length) {
-      text += " Unknown status, counted as to do: " + unknown.join(", ") + ".";
+    progress.querySelector(".pct").textContent = pct + "%";
+    progress.querySelector(".frac").textContent =
+      closed + " of " + total + " tasks terminal";
+    progress.querySelector(".bar").setAttribute("aria-label", pct +
+      "% terminal, " + closed + " of " + total + " tasks. " +
+      summary.join(", ") + ".");
+    // The line under the bar links each running, blocked, and unknown row.
+    var line = progress.querySelector(".counts");
+    line.textContent = "";
+    function linkRows(label, items) {
+      if (!items.length) { return; }
+      line.appendChild(document.createTextNode(
+        (line.childNodes.length ? " " : "") + label + ": "));
+      items.forEach(function (item, i) {
+        if (i) { line.appendChild(document.createTextNode(", ")); }
+        var link = document.createElement("a");
+        link.href = "#" + item.id;
+        link.textContent = item.id;
+        line.appendChild(link);
+      });
+      line.appendChild(document.createTextNode("."));
     }
-    progress.querySelector(".bar").setAttribute("aria-label",
-      text + " " + summary.join(", ") + ".");
-    progress.querySelector(".counts").textContent = text;
+    linkRows("In progress", running);
+    linkRows("Blocked", blocked);
+    linkRows("Unknown status, counted as to do", unknown);
+    if (!line.childNodes.length) {
+      line.textContent = "No task is in progress or blocked.";
+    }
+
+    // A plans index loads this page in a hidden frame and reads this message.
+    if (window.parent === window) { return; }
+    var resume = document.getElementById("current-resume-state");
+    var updated = /Updated:?\s*(\d{4}-\d{2}-\d{2}[^\s.,;]*(?: \d{2}:\d{2}(?::\d{2})?)?(?: UTC)?)/
+      .exec(text(resume));
+    var next = "";
+    if (resume) {
+      resume.querySelectorAll("tr").forEach(function (row) {
+        if (!next && /^next action$/i.test(text(row.cells[0]))) {
+          next = text(row.cells[1]);
+        }
+      });
+    }
+    if (!next) {
+      var fromLine = /Next action:\s*(.*)$/
+        .exec(text(document.getElementById("status-line")));
+      next = fromLine ? fromLine[1] : "";
+    }
+    var state = document.querySelector("[data-plan-status]");
+    var outcome = document.getElementById("outcome");
+    window.parent.postMessage({ type: "plan-summary", version: 1, summary: {
+      title: text(document.querySelector("h1")) || document.title,
+      status: state ? state.getAttribute("data-plan-status")
+        .split("(")[0].trim() : "",
+      statusToken: text(state),
+      updated: updated ? updated[1] : "",
+      modified: document.lastModified,
+      outcome: outcome ? text(outcome.querySelector("blockquote")) : "",
+      nextAction: next,
+      total: total, terminal: closed, percent: pct, counts: counts,
+      inProgress: running, blocked: blocked, unknown: unknown
+    } }, location.protocol === "file:" ? "*" : location.origin);
   });
 </script>
 </head>
@@ -190,17 +263,20 @@
   </section>
 
   <section id="progress">
-    <h2>Progress</h2>
+    <div class="progress-head">
+      <h2>Progress <span class="pct"></span></h2>
+      <span class="frac"></span>
+      <ul class="legend">
+        <li data-seg="done"><span class="swatch" aria-hidden="true"></span>Done <b></b></li>
+        <li data-seg="in_progress"><span class="swatch" aria-hidden="true"></span>In progress <b></b></li>
+        <li data-seg="blocked"><span class="swatch" aria-hidden="true"></span>Blocked <b></b></li>
+        <li data-seg="todo"><span class="swatch" aria-hidden="true"></span>To do <b></b></li>
+        <li data-seg="removed"><span class="swatch" aria-hidden="true"></span>Deferred, no-action, or rejected <b></b></li>
+      </ul>
+    </div>
     <div class="bar" role="img" aria-label="Progress appears when the page loads.">
       <span data-seg="done"></span><span data-seg="in_progress"></span><span data-seg="blocked"></span><span data-seg="todo"></span><span data-seg="removed"></span>
     </div>
-    <ul class="legend">
-      <li data-seg="done"><span class="swatch" aria-hidden="true"></span>Done <b></b></li>
-      <li data-seg="in_progress"><span class="swatch" aria-hidden="true"></span>In progress <b></b></li>
-      <li data-seg="blocked"><span class="swatch" aria-hidden="true"></span>Blocked <b></b></li>
-      <li data-seg="todo"><span class="swatch" aria-hidden="true"></span>To do <b></b></li>
-      <li data-seg="removed"><span class="swatch" aria-hidden="true"></span>Deferred, no-action, or rejected <b></b></li>
-    </ul>
     <p class="counts">Progress appears here when the page loads. The status
       ledger below is the source of truth.</p>
   </section>

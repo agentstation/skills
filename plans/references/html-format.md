@@ -26,7 +26,8 @@ The overview is the top of the page, in this order:
 1. The status line, as defined in [`structure.md`](structure.md).
 2. Current resume state, defined in [`structure.md`](structure.md).
 3. Outcome: the one-paragraph invariant.
-4. Progress: a stacked bar, a legend, and counts, computed from the ledger.
+4. Progress: the percentage and the legend on the title row, then a
+   stacked bar, computed from the ledger.
 5. Architecture: the before and after diagrams, side by side.
 
 The overview is the resume surface. A cold agent or a human reads only the
@@ -71,21 +72,76 @@ time. The bar reads left to right, and each segment width is a row count:
 4. `todo`, the empty track.
 5. `deferred`, `no-action`, and `rejected`, grey, at the right end.
 
+The Progress title row holds the percentage of terminal rows (`done`,
+`no-action`, and `rejected`), the terminal and total row counts, and the
+legend. The percentage rounds down, so 100% means every row is terminal.
 The legend gives the count of each segment, so no status depends on color
-alone. The count line gives the terminal rows (`done`, `no-action`, and
-`rejected`) and the ID of each `in_progress` task. It names each row with an
-unknown status, which counts as `todo`.
+alone. The line under the bar links each `in_progress` and `blocked` row.
+It also links each row with an unknown status, which counts as `todo`.
 
 The ledger status cells use the same colors. The colors are tokens on
 `:root`, with dark-mode and print values. The ledger stays the single
 source of truth. Without JavaScript the table still reads correctly, and the
 bar stays empty.
 
+## Plan summary message
+
+When a page frames the plan, the plan script posts one message to the
+parent window after it computes progress. The plans index reads this
+message. The message is the contract between a plan and the index:
+
+```text
+{ type: "plan-summary", version: 1, summary: {
+    title, status, statusToken, updated, modified, outcome, nextAction,
+    total, terminal, percent, counts, inProgress, blocked, unknown } }
+```
+
+- `title` is the `<h1>` text. `status` is the bare `data-plan-status`
+  name, and `statusToken` is its visible token.
+- `updated` is the first date after `Updated:` in Current resume state.
+  `modified` is `document.lastModified`.
+- `outcome` is the Outcome blockquote text.
+- `nextAction` is the `Next action` row of the Current resume state table.
+  Without that row, it is the text after `Next action:` in the status line.
+- `counts` holds the five segment counts. `inProgress`, `blocked`, and
+  `unknown` list rows as `{ id, task, status }`.
+
+The plan posts to `*` only from a `file:` URL, where no other origin can
+frame it. Over HTTP it posts only to its own origin. Change the message
+shape only with a new `version`, and update the index template in the same
+change.
+
+## Plans index page
+
+A repository with a plans directory keeps `index.html` beside the plans.
+Copy [`../assets/plans-index.html`](../assets/plans-index.html). The page
+shows each active plan as a card. A card holds the title, the percentage,
+the bar, and the legend. It also holds the outcome, the next action, and
+the in-progress and blocked task IDs. Totals across the active plans head
+the page.
+
+- The `<ol id="plan-list">` is the manifest. List each plan that is not
+  terminal, in execution order, one link per plan. Edit the list in the
+  same change as a plan lifecycle transition.
+- The page loads each listed plan in a hidden frame and reads its summary
+  message. It shows only plans whose live status is `active`. A plan that
+  becomes terminal leaves the page before an agent removes its manifest
+  row.
+- The page reads every plan again each minute while it is visible, when
+  the tab becomes visible, and on Refresh. It works from a `file:` URL,
+  where the browser blocks `fetch`, and from a local HTTP server.
+- A listed plan that sends no summary shows as a card with a link. Use
+  this to find a broken link or a plan without the current script.
+- Without JavaScript, the manifest list is the index.
+
 ## Editing rules
 
 - Edit the file as text with normal file tools.
 - Keep the section order and the section `id` attributes from the
-  template. The recovery loop depends on them.
+  template. The recovery loop and the plan summary message depend on them.
+- Keep the template's progress script unchanged. To upgrade an older plan,
+  replace its progress script, its `#progress` section, and its progress
+  styles with the template's versions.
 - Append a log row before the log table's closing `</tbody>`. The
   template keeps the script in `<head>`. The execution log is therefore
   the last content in the file, and only closing tags follow it.

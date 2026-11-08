@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plans</title>
+<style>
+  :root {
+    --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
+    --page: #ffffff; --card: #ffffff; --accent: #2563eb;
+    --done: #15803d; --on-done: #ffffff;
+    --in-progress: #eab308; --on-in-progress: #1a1e24;
+    --blocked: #dc2626; --on-blocked: #ffffff;
+    --removed: #9ca3af; --on-removed: #1a1e24;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e5e9ee; --muted: #9aa4af; --line: #333a43; --soft: #1b2027;
+      --page: #11151a; --card: #151a20; --accent: #60a5fa;
+      --done: #4ade80; --on-done: #1a1e24;
+      --in-progress: #facc15; --on-in-progress: #1a1e24;
+      --blocked: #f87171; --on-blocked: #1a1e24;
+      --removed: #6b7280; --on-removed: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 1080px;
+    background: var(--page); color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      sans-serif;
+  }
+  a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 0; }
+  .top { display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 0.5rem 1rem; }
+  .lede, .meta, .foot, .hidden-note { color: var(--muted);
+    font-size: 0.92rem; }
+  .lede { margin: 0.2rem 0 1rem; }
+  button { font: inherit; font-size: 0.88rem; color: var(--ink);
+    background: var(--soft); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0.25rem 0.75rem; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  .totals { display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem;
+    list-style: none; margin: 0; padding: 0.75rem 0; border-top: 1px solid
+    var(--line); border-bottom: 1px solid var(--line); }
+  .totals li { display: flex; flex-direction: column; }
+  .totals b { font-size: 1.35rem; line-height: 1.2;
+    font-variant-numeric: tabular-nums; }
+  .totals span { color: var(--muted); font-size: 0.82rem; }
+  .meta { margin: 0.5rem 0 1.5rem; }
+  #board { display: grid; gap: 1rem; }
+  .plan { background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 1rem 1.15rem; }
+  .plan-head { display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 0.2rem 1rem; }
+  .plan h2 { font-size: 1.08rem; margin: 0; }
+  .plan h2 a { color: inherit; text-decoration: none; }
+  .plan h2 a:hover { text-decoration: underline; }
+  .stamp { color: var(--muted); font-size: 0.82rem; }
+  .meter { display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; gap: 0.75rem; margin: 0.7rem 0 0.35rem; }
+  .meter .pct { font-size: 1.35rem; font-weight: 700; min-width: 3.2ch;
+    font-variant-numeric: tabular-nums; }
+  .meter .frac { color: var(--muted); font-size: 0.85rem;
+    font-variant-numeric: tabular-nums; }
+  .bar { display: flex; height: 0.8rem; border: 1px solid var(--muted);
+    border-radius: 999px; overflow: hidden; background: var(--soft); }
+  .bar > span { height: 100%; }
+  .bar > span + span { box-shadow: inset 2px 0 0 var(--card); }
+  [data-seg="done"] { --seg: var(--done); }
+  [data-seg="in_progress"] { --seg: var(--in-progress); }
+  [data-seg="blocked"] { --seg: var(--blocked); }
+  [data-seg="todo"] { --seg: transparent; }
+  [data-seg="removed"] { --seg: var(--removed); }
+  .bar > span, .swatch { background-color: var(--seg); }
+  .bar > [data-seg="blocked"], [data-seg="blocked"] .swatch {
+    background-image: repeating-linear-gradient(135deg, transparent 0 4px,
+      rgb(255 255 255 / 0.45) 4px 6px); }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.2rem 1rem;
+    list-style: none; margin: 0; padding: 0; font-size: 0.84rem;
+    color: var(--muted); }
+  .legend li { display: flex; align-items: center; gap: 0.35rem; }
+  .legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .legend .zero { opacity: 0.55; }
+  .swatch { display: inline-block; width: 0.75rem; height: 0.75rem;
+    border: 1px solid var(--muted); border-radius: 3px; }
+  [data-seg="todo"] .swatch { background-color: var(--soft); }
+  .facts { display: grid; grid-template-columns: max-content 1fr;
+    gap: 0.45rem 1rem; margin: 0.85rem 0 0; font-size: 0.92rem; }
+  .facts dt { color: var(--muted); font-size: 0.84rem; padding-top: 0.1rem; }
+  .facts dd { margin: 0; min-width: 0; }
+  .clamp { display: -webkit-box; -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+  .open .clamp { display: block; }
+  .more { margin-top: 0.25rem; padding: 0 0.5rem; font-size: 0.8rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .chip { font: 600 0.8rem/1.6 ui-monospace, SFMono-Regular, Menlo,
+    monospace; padding: 0 0.45rem; border-radius: 4px;
+    text-decoration: none; background: var(--seg); }
+  .chip[data-seg="in_progress"] { color: var(--on-in-progress); }
+  .chip[data-seg="blocked"] { color: var(--on-blocked); }
+  .chip[data-seg="todo"] { color: var(--ink); border: 1px solid var(--line); }
+  .missing { color: var(--muted); margin: 0.5rem 0 0; font-size: 0.92rem; }
+  .hidden-note { margin: 1rem 0 0; }
+  .foot { margin: 2rem 0 0; border-top: 1px solid var(--line);
+    padding-top: 0.75rem; }
+  @media (max-width: 560px) {
+    .facts { grid-template-columns: 1fr; gap: 0.1rem; }
+    .facts dd { margin-bottom: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Plans</h1>
+  <button id="refresh" type="button" hidden>Refresh</button>
+</div>
+<p class="lede">Active work in flight, in execution order. Each card reads
+  its plan's status ledger when this page loads.</p>
+
+<!-- The plan list is the manifest. List each plan that is not terminal, in
+     execution order, one link per plan. The page shows only plans whose
+     live status is active. Without JavaScript this list is the index. -->
+<ol id="plan-list">
+  <li><a href="example-plan.html">Example plan</a></li>
+</ol>
+
+<ul class="totals" id="totals" hidden></ul>
+<p class="meta" id="meta" hidden></p>
+<div id="board"></div>
+<p class="hidden-note" id="hidden-note" hidden></p>
+
+<p class="foot">Each plan owns its status. To change this page, edit the
+  plan, or edit the plan list in this file.</p>
+
+<script>
+  (function () {
+    var REFRESH_MS = 60000, TIMEOUT_MS = 15000;
+    var SEGMENTS = [["done", "Done"], ["in_progress", "In progress"],
+      ["blocked", "Blocked"], ["todo", "To do"],
+      ["removed", "Deferred, no-action, or rejected"]];
+    var list = document.getElementById("plan-list");
+    var board = document.getElementById("board");
+    var refreshButton = document.getElementById("refresh");
+    var opened = {};
+    var lastRefresh = 0;
+    var plans = Array.prototype.map.call(list.querySelectorAll("a[href]"),
+      function (link) {
+        return { href: link.getAttribute("href"),
+          label: link.textContent.trim(), frame: null, timer: 0,
+          summary: null, missing: false };
+      });
+
+    function el(tag, attrs, children) {
+      var node = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function (key) {
+        if (key === "text") { node.textContent = attrs[key]; }
+        else { node.setAttribute(key, attrs[key]); }
+      });
+      (children || []).forEach(function (child) {
+        if (child) { node.appendChild(child); }
+      });
+      return node;
+    }
+    function ago(value) {
+      var then = new Date(value).getTime();
+      if (!then) { return ""; }
+      var minutes = Math.round((Date.now() - then) / 60000);
+      if (minutes < 1) { return "edited just now"; }
+      if (minutes < 60) { return "edited " + minutes + " min ago"; }
+      if (minutes < 2880) {
+        return "edited " + Math.round(minutes / 60) + " h ago";
+      }
+      return "edited " + Math.round(minutes / 1440) + " days ago";
+    }
+
+    function load(plan) {
+      if (!plan.frame) {
+        plan.frame = el("iframe", { hidden: "", "aria-hidden": "true",
+          tabindex: "-1", title: "" });
+        document.body.appendChild(plan.frame);
+      }
+      clearTimeout(plan.timer);
+      plan.timer = setTimeout(function () {
+        if (!plan.summary) { plan.missing = true; render(); }
+      }, TIMEOUT_MS);
+      // The query string makes the browser read the file again.
+      plan.frame.src = plan.href.split("#")[0] +
+        (plan.href.indexOf("?") < 0 ? "?" : "&") + "r=" + Date.now();
+    }
+    function refresh() {
+      lastRefresh = Date.now();
+      plans.forEach(load);
+    }
+
+    window.addEventListener("message", function (event) {
+      var data = event.data;
+      if (!data || data.type !== "plan-summary" || data.version !== 1) {
+        return;
+      }
+      plans.forEach(function (plan) {
+        if (plan.frame && event.source === plan.frame.contentWindow) {
+          clearTimeout(plan.timer);
+          plan.summary = data.summary;
+          plan.missing = false;
+          render();
+        }
+      });
+    });
+
+    function clamp(key, text) {
+      var wrap = el("div", { "class": opened[key] ? "open" : "" });
+      var body = el("div", { "class": "clamp", text: text });
+      wrap.appendChild(body);
+      var more = el("button", { type: "button", "class": "more",
+        text: opened[key] ? "Less" : "More", hidden: "" });
+      more.addEventListener("click", function () {
+        opened[key] = !opened[key];
+        render();
+      });
+      wrap.appendChild(more);
+      requestAnimationFrame(function () {
+        if (opened[key] || body.scrollHeight > body.clientHeight + 1) {
+          more.hidden = false;
+        }
+      });
+      return wrap;
+    }
+    function chips(plan, items, seg) {
+      return el("div", { "class": "chips" }, items.map(function (item) {
+        return el("a", { "class": "chip", "data-seg": seg,
+          href: plan.href.split("#")[0] + "#" + item.id,
+          title: item.status + " · " + item.task, text: item.id });
+      }));
+    }
+
+    function card(plan) {
+      var s = plan.summary, base = plan.href.split("#")[0];
+      if (!s) {
+        return el("article", { "class": "plan" }, [
+          el("div", { "class": "plan-head" }, [el("h2", {}, [
+            el("a", { href: base, text: plan.label })])]),
+          el("p", { "class": "missing", text: plan.missing ?
+            "This plan sent no summary. Open it to read its status." :
+            "Reading the plan." })]);
+      }
+      var bar = el("div", { "class": "bar", role: "img", "aria-label":
+        s.percent + "% terminal, " + s.terminal + " of " + s.total +
+        " tasks." }, SEGMENTS.map(function (pair) {
+          var n = s.counts[pair[0]] || 0;
+          var seg = el("span", { "data-seg": pair[0],
+            title: pair[1] + ": " + n });
+          seg.style.width = s.total ? (n / s.total) * 100 + "%" : "0";
+          return seg;
+        }));
+      var legend = el("ul", { "class": "legend" }, SEGMENTS.map(
+        function (pair) {
+          var n = s.counts[pair[0]] || 0;
+          return el("li", { "data-seg": pair[0], "class": n ? "" : "zero" },
+            [el("span", { "class": "swatch", "aria-hidden": "true" }),
+              document.createTextNode(pair[1] + " "),
+              el("b", { text: String(n) })]);
+        }));
+      var facts = [];
+      function fact(term, value) {
+        if (value) { facts.push(el("dt", { text: term }), el("dd", {}, [value])); }
+      }
+      fact("Outcome", s.outcome && clamp(base + "#outcome", s.outcome));
+      fact("Next action", s.nextAction && clamp(base + "#next",
+        s.nextAction));
+      fact("In progress", s.inProgress.length &&
+        chips(plan, s.inProgress, "in_progress"));
+      fact("Blocked", s.blocked.length && chips(plan, s.blocked, "blocked"));
+      fact("Unknown status", s.unknown.length &&
+        chips(plan, s.unknown, "todo"));
+      var stamp = [s.updated && "Updated " + s.updated, ago(s.modified)]
+        .filter(Boolean).join(" · ");
+      return el("article", { "class": "plan" }, [
+        el("div", { "class": "plan-head" }, [
+          el("h2", {}, [el("a", { href: base, text: s.title || plan.label })]),
+          el("span", { "class": "stamp", text: stamp })]),
+        el("div", { "class": "meter" }, [
+          el("span", { "class": "pct", text: s.percent + "%" }), bar,
+          el("span", { "class": "frac", text: s.terminal + " / " + s.total })]),
+        legend,
+        el("dl", { "class": "facts" }, facts)]);
+    }
+
+    function render() {
+      var shown = plans.filter(function (plan) {
+        return !plan.summary || plan.summary.status === "active";
+      });
+      var hidden = plans.length - shown.length;
+      board.textContent = "";
+      shown.forEach(function (plan) { board.appendChild(card(plan)); });
+
+      var live = shown.filter(function (plan) { return plan.summary; });
+      var sum = function (pick) {
+        return live.reduce(function (n, plan) { return n + pick(plan.summary); }, 0);
+      };
+      var total = sum(function (s) { return s.total; });
+      var closed = sum(function (s) { return s.terminal; });
+      var totals = document.getElementById("totals");
+      totals.textContent = "";
+      [[String(live.length), live.length === 1 ? "active plan" : "active plans"],
+        [(total ? Math.floor((closed / total) * 100) : 0) + "%", "of " + total + " tasks terminal"],
+        [String(sum(function (s) { return s.counts.in_progress; })), "in progress"],
+        [String(sum(function (s) { return s.counts.blocked; })), "blocked"],
+        [String(sum(function (s) { return s.counts.todo; })), "to do"]
+      ].forEach(function (pair) {
+        totals.appendChild(el("li", {}, [el("b", { text: pair[0] }),
+          el("span", { text: pair[1] })]));
+      });
+      totals.hidden = false;
+
+      var meta = document.getElementById("meta");
+      meta.textContent = "Read " + new Date(lastRefresh).toLocaleTimeString() +
+        ". The page reads every plan again each minute while it is visible.";
+      meta.hidden = false;
+
+      var note = document.getElementById("hidden-note");
+      note.textContent = hidden === 1 ?
+        "1 listed plan is not active and is not shown." :
+        hidden + " listed plans are not active and are not shown.";
+      note.hidden = hidden === 0;
+    }
+
+    list.hidden = true;
+    refreshButton.hidden = false;
+    refreshButton.addEventListener("click", refresh);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && Date.now() - lastRefresh > 10000) { refresh(); }
+    });
+    setInterval(function () { if (!document.hidden) { refresh(); } },
+      REFRESH_MS);
+    refresh();
+    render();
+  })();
+</script>
+</body>
+</html>
