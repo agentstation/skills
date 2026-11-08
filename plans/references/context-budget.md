@@ -17,6 +17,7 @@ the plan when any default trigger applies:
 | --- | --- |
 | Execution log inside the plan | More than 10 entries. |
 | Current resume state | More than 500 words, or 150 words per `in_progress` task when that is larger. |
+| Next action, in the status line or the resume state | More than 80 words. |
 | Current resume state | Holds dated narrative from before the latest task transition, or disagrees with the ledger. |
 | Handoff | More than 250 words. |
 | Resume procedure | Requires full historical logs or repeated proof-root reads. |

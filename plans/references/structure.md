@@ -79,11 +79,11 @@ Update that record at every task transition and before every stop.
 An `active` plan contains these sections, in this order:
 
 1. Status line.
-2. Current resume state: the record defined below.
-3. Outcome: one quotable paragraph that states the invariant the plan
-   delivers. A reviewer holds the whole plan against it.
-4. Progress, in an HTML plan only: the bar and counts that the ledger
+2. Progress, in an HTML plan only: the bar and counts that the ledger
    drives.
+3. Current resume state: the record defined below.
+4. Outcome: one quotable paragraph that states the invariant the plan
+   delivers. A reviewer holds the whole plan against it.
 5. Architecture: before and after diagrams when the plan changes structure.
 6. Scope: what the plan owns, what it does not own with the owning plan
    named, and explicit non-goals.
@@ -139,6 +139,9 @@ acting. Follow higher-priority instructions when they change the plan.
 - Verification: exact commands.
 ```
 
+In an HTML plan, the task heading or its wrapper carries
+`id="task-<ID>"`, so the ledger row and the task block link to each other.
+
 Write acceptance as falsifiable state assertions. Name literal test
 functions where they exist. One task is one pull request unless its row
 permits a mechanical split.
@@ -156,7 +159,8 @@ The status ledger is a table with columns `ID | Task | Status | Evidence`.
 
 - The status cell holds one status token and nothing else.
 - The evidence cell holds the proof: pull request, commit, date, exact test
-  counts, and the proof file path.
+  counts, and the proof file path. Lead with the current result. Move older
+  detail to the proof root.
 - Give every task a stable ID: a plan prefix of two to four letters plus a
   number, with dotted subtasks. Never renumber.
 - Keep one row per task and one line per row, so rebases cannot lose rows
@@ -254,6 +258,8 @@ Update the index in the same change as any plan lifecycle transition.
 
 For HTML plans, the index is `index.html`, copied from the index template.
 It reads status and progress live from each plan and shows only active
-plans. [`html-format.md`](html-format.md) defines the page and its manifest.
-Do not copy plan status into the index. For Markdown plans, the index is a
-README table of plan links in execution order.
+plans. It also holds the work that no plan owns and the routing rules.
+[`html-format.md`](html-format.md) defines the page and its manifest.
+Do not copy plan status into the index, and keep no second index beside
+it. For Markdown plans, the index is a README table of plan links in
+execution order.

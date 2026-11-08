@@ -66,6 +66,9 @@ stops only at a valid stop state.
 - [`references/context-budget.md`](references/context-budget.md): log review
   triggers, safe document compaction, bounded resume reads, and the cold-resume
   check.
+- [`scripts/plans`](scripts/plans): `check` finds broken links and format
+  defects in HTML plans and indexes. `upgrade` puts the current
+  skill-owned blocks into a plan.
 - [`GLOSSARY.md`](GLOSSARY.md): technical terms for prose verification.
 
 ## Maintenance
@@ -76,8 +79,16 @@ Run from the installed skill directory:
 ../technical-writing/scripts/technical-writing lint . --glossary GLOSSARY.md --format text
 ```
 
-Run the skill validator from the skills source repository root:
+Check the HTML assets from the skill directory:
 
 ```bash
+scripts/plans check assets/plan-template.html assets/plans-index.html
+```
+
+Run the tool tests and the skill validator from the skills source
+repository root:
+
+```bash
+python3 -m unittest plans/tests/test_plans.py
 ./scripts/validate-skills
 ```

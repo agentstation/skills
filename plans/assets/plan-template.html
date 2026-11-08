@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plan title</title>
-<style>
+<!-- The plans skill owns this style block and the script block below.
+     A plan never edits them. An upgrade replaces each block whole. -->
+<style data-plans="2">
   :root {
+    color-scheme: light dark;
     --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
-    --page: #ffffff; --accent: #2563eb;
+    --page: #ffffff; --accent: #2563eb; --hl: #e4ecfb;
     --done: #15803d; --on-done: #ffffff;
     --in-progress: #eab308; --on-in-progress: #1a1e24;
     --blocked: #dc2626; --on-blocked: #ffffff;
@@ -16,20 +19,44 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --ink: #e5e9ee; --muted: #9aa4af; --line: #333a43; --soft: #1b2027;
-      --page: #11151a; --accent: #60a5fa;
+      --page: #11151a; --accent: #60a5fa; --hl: #1b2a40;
       --done: #4ade80; --on-done: #1a1e24;
       --in-progress: #facc15; --on-in-progress: #1a1e24;
       --blocked: #f87171; --on-blocked: #1a1e24;
       --removed: #6b7280; --on-removed: #ffffff;
     }
   }
+  /* A terminal plan is history: its status colors turn grey. The script
+     sets the class; :has() covers a page without the script. */
+  body.plan-frozen {
+    --done: var(--removed); --on-done: var(--on-removed);
+    --in-progress: var(--removed); --on-in-progress: var(--on-removed);
+    --blocked: var(--removed); --on-blocked: var(--on-removed); }
+  body:has(#status-line [data-plan-status^="complete"],
+    #status-line [data-plan-status^="superseded"],
+    #status-line [data-plan-status^="abandoned"]) {
+    --done: var(--removed); --on-done: var(--on-removed);
+    --in-progress: var(--removed); --on-in-progress: var(--on-removed);
+    --blocked: var(--removed); --on-blocked: var(--on-removed); }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0 auto; padding: 2rem 1.25rem 4rem; max-width: 1080px;
     background: var(--page); color: var(--ink);
     font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       sans-serif;
   }
+  a, a:visited { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
+    border-radius: 3px; }
+  /* Anchored targets clear the sticky plan bar and the ledger header. */
+  [id] { scroll-margin-top: calc(var(--pb-h, 0px) + 0.75rem); }
+  #ledger tbody tr[id] { scroll-margin-top:
+    calc(var(--pb-h, 0px) + var(--th-h, 2.4rem) + 0.5rem); }
+  tr:target > td, h2:target, h3:target, h4:target { background: var(--hl); }
+  [id^="task-"]:target > h2:first-child, [id^="task-"]:target > h3:first-child,
+  [id^="task-"]:target > h4:first-child { background: var(--hl); }
+  tr:target > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   h1 { font-size: 1.6rem; margin: 0 0 0.25rem; }
   h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; border-bottom: 1px solid
     var(--line); padding-bottom: 0.25rem; }
@@ -45,9 +72,16 @@
   table { border-collapse: collapse; width: 100%; margin: 0.75rem 0;
     font-size: 0.92rem; }
   th, td { border: 1px solid var(--line); padding: 0.35rem 0.55rem;
-    text-align: left; vertical-align: top; }
+    text-align: left; vertical-align: top; overflow-wrap: break-word; }
   th { background: var(--soft); }
+  /* Chrome lets break-word shrink an auto-layout column, so the label
+     column keeps whole words. */
+  th:first-child, td:first-child { overflow-wrap: normal; }
+  button, input, select { font: inherit; color: inherit; }
   #status-line { color: var(--muted); font-size: 0.92rem; margin: 0 0 1rem; }
+  .lifecycle { margin: 0 0 1rem; padding: 0.6rem 0.9rem; border: 1px solid
+    var(--line); border-left: 4px solid var(--muted); border-radius: 4px;
+    background: var(--soft); }
   /* Progress bar, left to right: done, in_progress, blocked, todo (the
      empty track), then deferred, no-action, and rejected. */
   .bar { display: flex; height: 0.9rem; border: 1px solid var(--muted);
@@ -61,15 +95,22 @@
   [data-seg="removed"] { --seg: var(--removed); }
   .bar > span, .swatch { background-color: var(--seg);
     print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .bar > [data-seg="blocked"], [data-seg="blocked"] .swatch {
+  .bar > [data-seg="blocked"], [data-seg="blocked"] .swatch,
+  .swatch[data-seg="blocked"] {
     background-image: repeating-linear-gradient(135deg, transparent 0 4px,
       rgb(255 255 255 / 0.45) 4px 6px); }
   .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem;
     list-style: none; margin: 0.5rem 0 0; padding: 0; font-size: 0.88rem; }
   .legend li { display: flex; align-items: center; gap: 0.4rem; }
-  .swatch { display: inline-block; width: 0.85rem; height: 0.85rem;
-    border: 1px solid var(--muted); border-radius: 3px; }
-  [data-seg="todo"] .swatch { background-color: var(--soft); }
+  .swatch { display: inline-block; flex: none; width: 0.85rem;
+    height: 0.85rem; border: 1px solid var(--muted); border-radius: 3px; }
+  [data-seg="todo"] .swatch, .swatch[data-seg="todo"] {
+    background-color: var(--soft); }
+  .swatch[data-seg="unknown"] { background: none; border: 1.5px dashed
+    var(--blocked); }
+  /* A zero count stays readable; only its swatch fades. */
+  .legend .zero, .seg-group .zero { color: var(--muted); }
+  .legend .zero .swatch, .seg-group .zero .swatch { opacity: 0.35; }
   .counts { color: var(--muted); font-size: 0.92rem; margin: 0.4rem 0 0; }
   /* The percentage, the fraction, and the legend share the title row. */
   .progress-head { display: flex; flex-wrap: wrap; align-items: baseline;
@@ -80,147 +121,949 @@
     tabular-nums; }
   .progress-head .frac { color: var(--muted); font-size: 0.88rem; }
   .progress-head .legend { margin: 0; }
+  .legend button { display: inline-flex; align-items: center; gap: 0.4rem;
+    margin: -0.1rem -0.3rem; padding: 0.1rem 0.3rem; border: 1px solid
+    transparent; border-radius: 4px; background: none; cursor: pointer; }
+  .legend button:hover { background: var(--soft); border-color: var(--line); }
+  .legend button[aria-pressed="true"] { background: var(--hl);
+    border-color: var(--accent); }
+  .legend .unknown-btn { margin-left: -0.25rem; }
+  /* Phase progress, one small bar per phase. */
+  .phases { display: grid; grid-template-columns: repeat(auto-fill,
+    minmax(12.5rem, 1fr)); gap: 0.15rem 1rem; list-style: none;
+    margin: 0.6rem 0 0; padding: 0; font-size: 0.82rem; }
+  .phases button { display: grid; grid-template-columns: 4.25rem 1fr auto;
+    align-items: center; gap: 0.5rem; width: 100%; padding: 0.15rem 0.35rem;
+    border: 1px solid transparent; border-radius: 5px; background: none;
+    text-align: left; cursor: pointer; }
+  .phases button:hover { background: var(--soft); border-color: var(--line); }
+  .phases button[aria-pressed="true"] { background: var(--hl);
+    border-color: var(--accent); }
+  .phases .key { font-weight: 600; }
+  .phases .frac { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar.thin { height: 0.45rem; }
+  .bar.thin > span + span, .bar.mini > span + span {
+    box-shadow: inset 1px 0 0 var(--page); }
   .pair { display: grid; grid-template-columns: repeat(auto-fit,
     minmax(280px, 1fr)); gap: 1rem; }
   figure { margin: 0; border: 1px solid var(--line); border-radius: 8px;
     padding: 0.75rem; background: var(--soft); }
   figcaption { font-weight: 600; margin-bottom: 0.5rem; }
   figure svg { max-width: 100%; height: auto; }
+  figure pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The resume row that holds the next action. */
+  #current-resume-state tr.next > td:first-child { font-weight: 700;
+    box-shadow: inset 3px 0 0 var(--accent); }
+  .age { color: var(--muted); }
   /* Ledger status tokens use the bar colors. */
-  tr[data-status] td:nth-child(3) code { font-weight: 600; }
-  tr[data-status^="done"] td:nth-child(3) code {
+  tr[data-status] td:nth-child(3) code, .chip code { font-weight: 600; }
+  tr[data-status^="done"] td:nth-child(3) code,
+  .chip[data-status^="done"] code {
     background: var(--done); color: var(--on-done); border-color: transparent; }
-  tr[data-status^="in_progress"] td:nth-child(3) code {
+  tr[data-status^="in_progress"] td:nth-child(3) code,
+  .chip[data-status^="in_progress"] code {
     background: var(--in-progress); color: var(--on-in-progress);
     border-color: transparent; }
-  tr[data-status^="blocked"] td:nth-child(3) code {
+  tr[data-status^="blocked"] td:nth-child(3) code,
+  .chip[data-status^="blocked"] code {
     background: var(--blocked); color: var(--on-blocked);
     border-color: transparent; }
   tr[data-status^="deferred"] td:nth-child(3) code,
   tr[data-status^="no-action"] td:nth-child(3) code,
-  tr[data-status^="rejected"] td:nth-child(3) code {
+  tr[data-status^="rejected"] td:nth-child(3) code,
+  .chip[data-status^="deferred"] code, .chip[data-status^="no-action"] code,
+  .chip[data-status^="rejected"] code {
     background: var(--removed); color: var(--on-removed);
     border-color: transparent; }
-  tr[data-status] td:nth-child(3) code {
-    print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  tr[data-status] td:nth-child(3) code, .chip code {
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+    -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  /* A status outside the format counts as todo and shows a dashed mark. */
+  tr.unknown-status td:nth-child(3) code, .chip.unknown-status code {
+    outline: 1.5px dashed var(--blocked); outline-offset: 1px; }
+  .chip { margin-left: 0.5rem; font-size: 0.8rem; font-weight: 400;
+    text-decoration: none; vertical-align: 0.1em; white-space: nowrap; }
+  .chip:hover code { outline: 1px solid var(--accent); }
+  /* Ledger layout: fixed columns, a sticky header, clamped evidence. */
+  /* Fixed columns: long tokens may break anywhere. */
+  #ledger table, #execution-log table { table-layout: fixed; }
+  #ledger td, #execution-log td { overflow-wrap: anywhere; }
+  #ledger th:nth-child(1) { width: 6.5rem; }
+  #ledger th:nth-child(2) { width: 28%; }
+  #ledger th:nth-child(3) { width: 8.5rem; }
+  /* Collapsed borders stay behind a sticky cell, so the header slides
+     2px under the plan bar to close the gap. */
+  #ledger thead th { position: sticky; top: calc(var(--pb-h, 0px) - 2px);
+    z-index: 2; box-shadow: inset 0 -1px 0 var(--line); }
+  .ev.clamp:not(.open) { max-height: 6.2em; overflow: hidden;
+    -webkit-mask-image: linear-gradient(#000 55%, transparent);
+    mask-image: linear-gradient(#000 55%, transparent); }
+  .ev-all .ev.clamp { max-height: none; -webkit-mask-image: none;
+    mask-image: none; }
+  .ev-all .ev-toggle { display: none; }
+  .ev-toggle, .link-btn { padding: 0; border: 0; background: none;
+    color: var(--accent); font-size: 0.85rem; text-decoration: underline;
+    cursor: pointer; }
+  .ev-toggle { margin-top: 0.2rem; }
+  .filtered-out { display: none; }
+  /* Ledger toolbar. */
+  .ledger-tools { margin: 0.6rem 0 0.25rem; font-size: 0.86rem; }
+  .seg-group, .tool-row { display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0.35rem 0.4rem; }
+  .tool-row { gap: 0.5rem 0.9rem; margin-top: 0.5rem; }
+  .tool { display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.2rem 0.6rem; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--page); cursor: pointer; white-space: nowrap; }
+  .tool:hover { border-color: var(--muted); }
+  .tool[aria-pressed="true"] { background: var(--hl); border-color:
+    var(--accent); font-weight: 600; }
+  .tool .n { color: var(--muted); font-variant-numeric: tabular-nums;
+    font-weight: 400; }
+  .tool[aria-pressed="true"] .n { color: inherit; }
+  .field { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .field > span { color: var(--muted); }
+  .field input, .field select { padding: 0.2rem 0.5rem; border: 1px solid
+    var(--line); border-radius: 6px; background: var(--page); }
+  .field input { width: 15rem; max-width: 52vw; }
+  .search { position: relative; }
+  .search kbd { position: absolute; right: 0.45rem; padding: 0 0.3rem;
+    border: 1px solid var(--line); border-radius: 3px; color: var(--muted);
+    font: 0.75rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    pointer-events: none; }
+  .search input:focus + kbd, .search input:not(:placeholder-shown) + kbd {
+    display: none; }
+  .row-count { margin: 0 0 0 auto; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  /* Sticky plan bar, built by the script from the page sections. */
+  .planbar { position: sticky; top: 0; z-index: 10; display: flex;
+    flex-wrap: wrap; align-items: center; gap: 0.25rem 1.25rem;
+    margin: -2rem 0 1.25rem; padding: 0.45rem 0; background: var(--page);
+    border-bottom: 1px solid var(--line); font-size: 0.86rem; }
+  .pb-id { display: flex; align-items: center; gap: 0.65rem; min-width: 0;
+    flex: 1 1 18rem; }
+  .pb-title, .pb-title:visited { min-width: 0; overflow: hidden;
+    color: var(--ink); font-weight: 600; text-decoration: none;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .pb-title:hover { text-decoration: underline; }
+  .pb-id code { flex: none; }
+  .pb-progress { display: inline-flex; flex: none; align-items: center;
+    gap: 0.4rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .bar.mini { width: 4.5rem; height: 0.5rem; }
+  .pb-upd { flex: none; color: var(--muted); white-space: nowrap; }
+  .pb-upd.aging::before { content: ""; display: inline-block; width: 0.5rem;
+    height: 0.5rem; margin-right: 0.35rem; border-radius: 50%;
+    background: var(--in-progress); }
+  .pb-upd.stale { padding: 0 0.45rem; border: 1px solid var(--blocked);
+    border-radius: 999px; color: var(--ink); }
+  .pb-nav { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+  .pb-nav ul { display: flex; gap: 0.1rem; min-width: 0; margin: 0;
+    padding: 0; overflow-x: auto; list-style: none; scrollbar-width: none; }
+  .pb-nav a, .pb-nav a:visited, .pb-more > summary { display: block;
+    padding: 0.15rem 0.5rem; border-radius: 5px; color: var(--muted);
+    text-decoration: none; white-space: nowrap; cursor: pointer; }
+  .pb-nav a:hover, .pb-more > summary:hover { background: var(--soft);
+    color: var(--ink); }
+  .pb-nav a[aria-current="true"], .pb-more.has-current > summary {
+    background: var(--soft); color: var(--ink); font-weight: 600; }
+  .pb-more { position: relative; }
+  .pb-more > summary { list-style: none; }
+  .pb-more > summary::-webkit-details-marker { display: none; }
+  .pb-more > summary::after { content: ""; display: inline-block;
+    margin-left: 0.35rem; border: 0.25rem solid transparent;
+    border-top-color: currentColor; vertical-align: -0.05rem; }
+  .pb-more ul { position: absolute; top: calc(100% + 0.35rem); right: 0;
+    display: block; min-width: 14rem; max-height: 60vh; padding: 0.3rem;
+    overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--page); box-shadow: 0 6px 20px rgb(0 0 0 / 0.14); }
+  /* Execution log columns: Action and Evidence share the rest. */
+  #execution-log th:nth-child(1) { width: 9.5rem; }
+  #execution-log th:nth-child(2) { width: 7rem; }
+  #execution-log td:nth-child(1) { white-space: nowrap; }
+  /* Narrow screens stack each ledger and log row. */
+  @media (max-width: 640px) {
+    body { padding: 1.25rem 0.9rem 3rem; }
+    .planbar { margin-top: -1.25rem; }
+    .pb-id { flex-basis: 100%; }
+    .pb-nav { flex-basis: 100%; }
+    .row-count { flex-basis: 100%; margin: 0; }
+    #ledger table, #ledger tbody, #execution-log table,
+    #execution-log tbody { display: block; }
+    #ledger thead, #execution-log thead { position: absolute; width: 1px;
+      height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    #ledger tbody tr, #execution-log tbody tr { display: grid;
+      grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 0.6rem;
+      padding: 0.55rem 0.15rem; border-top: 1px solid var(--line); }
+    #ledger tbody tr.filtered-out { display: none; }
+    #ledger td, #execution-log td { padding: 0; border: 0; }
+    #ledger td:nth-child(1), #execution-log td:nth-child(1) {
+      grid-area: 1 / 1; font-weight: 600; }
+    #ledger td:nth-child(3), #execution-log td:nth-child(2) {
+      grid-area: 1 / 2; }
+    #ledger td:nth-child(2), #ledger td:nth-child(4),
+    #execution-log td:nth-child(3), #execution-log td:nth-child(4) {
+      grid-column: 1 / -1; }
+    #ledger td:nth-child(4):not(:empty)::before,
+    #execution-log td:nth-child(4):not(:empty)::before { content: "Evidence";
+      display: block; color: var(--muted); font-size: 0.75rem;
+      letter-spacing: 0.04em; text-transform: uppercase; }
+    tr:target { background: var(--hl); }
+  }
   @page { margin: 0.7in 0.6in; size: letter; }
   @media print {
     :root {
       --ink: #1a1e24; --muted: #5c6570; --line: #d8dde3; --soft: #f4f6f8;
-      --page: #ffffff; --accent: #2563eb;
+      --page: #ffffff; --accent: #2563eb; --hl: #e4ecfb;
       --done: #15803d; --on-done: #ffffff;
       --in-progress: #eab308; --on-in-progress: #1a1e24;
       --blocked: #dc2626; --on-blocked: #ffffff;
       --removed: #9ca3af; --on-removed: #1a1e24;
     }
     body { max-width: none; padding: 0; }
+    .planbar, .ledger-tools, .ev-toggle, .phases, .age {
+      display: none !important; }
+    .legend button[aria-pressed="true"] { background: none;
+      border-color: transparent; }
+    .ev.clamp { max-height: none !important; overflow: visible !important;
+      -webkit-mask-image: none !important; mask-image: none !important; }
+    #ledger tbody tr.filtered-out { display: table-row; }
+    #ledger thead th { position: static; }
+    /* Paper is narrow: smaller type and narrower fixed columns. */
+    html { font-size: 13px; }
+    body { font-size: 1rem; }
+    #ledger th:nth-child(1), #execution-log th:nth-child(2) { width: 5.5em; }
+    #ledger th:nth-child(2) { width: 22%; }
+    #ledger th:nth-child(3) { width: 7.5em; }
+    #execution-log th:nth-child(1) { width: 8.5em; }
+    thead { display: table-header-group; }
   }
 </style>
-<script>
-  // Progress and the plan summary. The status ledger is the source of truth.
+<script data-plans="2">
+  // Progress, the plan summary, and the page tools. The status ledger is
+  // the source of truth: every derived view reads data-status and the page.
   document.addEventListener("DOMContentLoaded", function () {
     // Each bare task status maps to one bar segment.
     var segmentOf = { "done": "done", "in_progress": "in_progress",
       "blocked": "blocked", "todo": "todo", "deferred": "removed",
       "no-action": "removed", "rejected": "removed" };
     var terminal = { "done": 1, "no-action": 1, "rejected": 1 };
+    var order = ["done", "in_progress", "blocked", "todo", "removed"];
     var names = { "done": "Done", "in_progress": "In progress",
       "blocked": "Blocked", "todo": "To do",
       "removed": "Deferred, no-action, or rejected" };
-    var counts = { "done": 0, "in_progress": 0, "blocked": 0, "todo": 0,
-      "removed": 0 };
+    var planTerminal = { "complete": 1, "superseded": 1, "abandoned": 1 };
+    var planNotes = {
+      "superseded": "Superseded. This plan is history, not a control plane.",
+      "complete": "Complete. Every row is terminal.",
+      "abandoned": "Abandoned. This plan is history, not a control plane.",
+      "draft": "Draft. Not an execution target.",
+      "proposed": "Proposed. Needs an owner decision.",
+      "deferred": "Deferred until its trigger." };
+    var own = Object.prototype.hasOwnProperty;
     function text(node) {
       return node ? node.textContent.replace(/\s+/g, " ").trim() : "";
     }
-    function task(row) {
-      return { id: row.id, task: text(row.cells[1]),
-        status: text(row.cells[2]) };
+    function bare(value) { return String(value || "").split("(")[0].trim(); }
+    function newCounts() {
+      return { "done": 0, "in_progress": 0, "blocked": 0, "todo": 0,
+        "removed": 0 };
     }
-    var rows = document.querySelectorAll("#ledger tbody tr[data-status]");
-    var total = rows.length, closed = 0;
-    var running = [], blocked = [], unknown = [];
-    rows.forEach(function (row) {
-      var status = row.getAttribute("data-status").split("(")[0].trim();
-      if (!segmentOf[status]) { unknown.push(task(row)); status = "todo"; }
-      counts[segmentOf[status]] += 1;
-      if (terminal[status]) { closed += 1; }
-      if (status === "in_progress") { running.push(task(row)); }
-      if (status === "blocked") { blocked.push(task(row)); }
-    });
-    // Round down, so 100% means that every row is terminal.
-    var pct = total ? Math.floor((closed / total) * 100) : 0;
-    var progress = document.getElementById("progress");
-    var summary = [];
-    progress.querySelectorAll(".bar > [data-seg]").forEach(function (seg) {
-      var key = seg.getAttribute("data-seg"), n = counts[key];
-      seg.style.width = total ? (n / total) * 100 + "%" : "0";
-      seg.title = names[key] + ": " + n;
-      summary.push(names[key] + " " + n);
-    });
-    progress.querySelectorAll(".legend [data-seg]").forEach(function (item) {
-      item.querySelector("b").textContent = counts[item.getAttribute("data-seg")];
-    });
-    progress.querySelector(".pct").textContent = pct + "%";
-    progress.querySelector(".frac").textContent =
-      closed + " of " + total + " tasks terminal";
-    progress.querySelector(".bar").setAttribute("aria-label", pct +
-      "% terminal, " + closed + " of " + total + " tasks. " +
-      summary.join(", ") + ".");
-    // The line under the bar links each running, blocked, and unknown row.
-    var line = progress.querySelector(".counts");
-    line.textContent = "";
-    function linkRows(label, items) {
-      if (!items.length) { return; }
-      line.appendChild(document.createTextNode(
-        (line.childNodes.length ? " " : "") + label + ": "));
-      items.forEach(function (item, i) {
-        if (i) { line.appendChild(document.createTextNode(", ")); }
-        var link = document.createElement("a");
-        link.href = "#" + item.id;
-        link.textContent = item.id;
-        line.appendChild(link);
+    function el(tag, attrs, kids) {
+      var node = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function (key) {
+        if (key === "text") { node.textContent = attrs[key]; }
+        else if (key === "class") { node.className = attrs[key]; }
+        else { node.setAttribute(key, attrs[key]); }
       });
-      line.appendChild(document.createTextNode("."));
+      (kids || []).forEach(function (kid) {
+        node.appendChild(typeof kid === "string" ?
+          document.createTextNode(kid) : kid);
+      });
+      return node;
     }
-    linkRows("In progress", running);
-    linkRows("Blocked", blocked);
-    linkRows("Unknown status, counted as to do", unknown);
-    if (!line.childNodes.length) {
-      line.textContent = "No task is in progress or blocked.";
+    function fillBar(bar, counts, total) {
+      bar.querySelectorAll("[data-seg]").forEach(function (seg) {
+        var n = counts[seg.getAttribute("data-seg")] || 0;
+        seg.style.width = total ? (n / total) * 100 + "%" : "0";
+      });
+    }
+    function makeBar(kind, counts, total) {
+      var bar = el("span", { "class": "bar " + kind, "aria-hidden": "true" });
+      order.forEach(function (key) {
+        bar.appendChild(el("span", { "data-seg": key }));
+      });
+      fillBar(bar, counts, total);
+      return bar;
     }
 
-    // A plans index loads this page in a hidden frame and reads this message.
-    if (window.parent === window) { return; }
+    // Read the ledger once. Phases exist only when an ID has a dot.
+    var rows = [].slice.call(
+      document.querySelectorAll("#ledger tbody tr[data-status]"));
+    var dotted = rows.some(function (row) { return row.id.indexOf(".") >= 0; });
+    var items = [], byId = {}, counts = newCounts(), closed = 0;
+    var running = [], blocked = [], unknown = [], phases = [], phaseOf = {};
+    rows.forEach(function (row) {
+      var status = bare(row.getAttribute("data-status"));
+      var known = own.call(segmentOf, status);
+      var item = { row: row, status: status, known: known,
+        seg: known ? segmentOf[status] : "todo", phase: "", hay: null };
+      var entry = { id: row.id, task: text(row.cells[1]),
+        status: text(row.cells[2]) };
+      counts[item.seg] += 1;
+      if (terminal[status]) { closed += 1; }
+      if (!known) { unknown.push(entry); }
+      if (status === "in_progress") { running.push(entry); }
+      if (status === "blocked") { blocked.push(entry); }
+      if (dotted) {
+        // NM2.4 is in NM2. NPC.5 is in NPC. Other IDs go to Other.
+        var match = /^[A-Z]+\d+/.exec(row.id) || /^([^.]+)\./.exec(row.id);
+        item.phase = match ? (match[1] || match[0]) : "Other";
+        var phase = phaseOf[item.phase];
+        if (!phase) {
+          phase = phaseOf[item.phase] = { key: item.phase, total: 0,
+            terminal: 0, counts: newCounts() };
+          phases.push(phase);
+        }
+        phase.total += 1;
+        phase.counts[item.seg] += 1;
+        if (terminal[status]) { phase.terminal += 1; }
+      }
+      items.push(item);
+      if (row.id) { byId[row.id] = item; }
+    });
+    // One phase is the whole plan, so it adds nothing.
+    if (phases.length < 2) {
+      phases = [];
+      items.forEach(function (item) { item.phase = ""; });
+    }
+    var total = rows.length;
+    // Round down, so 100% means that every row is terminal.
+    var pct = total ? Math.floor((closed / total) * 100) : 0;
+
+    var statusLine = document.getElementById("status-line");
+    var state = (statusLine && statusLine.querySelector("[data-plan-status]")) ||
+      document.querySelector("[data-plan-status]");
+    var planStatus = state ? bare(state.getAttribute("data-plan-status")) : "";
+    var frozen = own.call(planTerminal, planStatus);
+    if (frozen) { document.body.classList.add("plan-frozen"); }
+
+    // Render the progress section.
+    var progress = document.getElementById("progress");
+    var todoOnly = counts.todo - unknown.length;
+    if (progress) {
+      var summary = [];
+      progress.querySelectorAll(".bar > [data-seg]").forEach(function (seg) {
+        var key = seg.getAttribute("data-seg"), n = counts[key];
+        var label = names[key] + " " + n +
+          (key === "todo" && unknown.length ?
+            " (" + unknown.length + " unknown)" : "");
+        seg.style.width = total ? (n / total) * 100 + "%" : "0";
+        seg.title = label;
+        summary.push(label);
+      });
+      progress.querySelectorAll(".legend [data-seg]").forEach(function (item) {
+        var key = item.getAttribute("data-seg"), count = item.querySelector("b");
+        if (count) { count.textContent = key === "todo" ? todoOnly : counts[key]; }
+        if (!counts[key]) { item.classList.add("zero"); }
+        if (key === "todo" && unknown.length) {
+          item.appendChild(el("span", { "class": "unknown-n",
+            text: "+ " + unknown.length + " unknown" }));
+        }
+      });
+      var pctNode = progress.querySelector(".pct");
+      if (pctNode) {
+        pctNode.textContent = frozen ? "frozen at " + pct + "%" : pct + "%";
+      }
+      var frac = progress.querySelector(".frac");
+      if (frac) { frac.textContent = closed + " of " + total + " tasks terminal"; }
+      var mainBar = progress.querySelector(".bar");
+      if (mainBar) {
+        mainBar.setAttribute("aria-label", pct + "% terminal, " + closed +
+          " of " + total + " tasks. " + summary.join(", ") + ".");
+      }
+      // The line under the bar links each running, blocked, and unknown row.
+      var line = progress.querySelector(".counts");
+      if (line) {
+        line.textContent = "";
+        var linkRows = function (label, list) {
+          if (!list.length) { return; }
+          line.appendChild(document.createTextNode(
+            (line.childNodes.length ? " " : "") + label + ": "));
+          list.forEach(function (item, i) {
+            if (i) { line.appendChild(document.createTextNode(", ")); }
+            line.appendChild(el("a", { href: "#" + item.id, text: item.id }));
+          });
+          line.appendChild(document.createTextNode("."));
+        };
+        linkRows(frozen ? "Left in progress" : "In progress", running);
+        linkRows(frozen ? "Left blocked" : "Blocked", blocked);
+        linkRows("Unknown status, counted as to do", unknown);
+        if (!line.childNodes.length) {
+          line.textContent = "No task is in progress or blocked.";
+        }
+      }
+    }
+
+    // Read the resume state: the Updated stamp and the next action row.
     var resume = document.getElementById("current-resume-state");
-    var updated = /Updated:?\s*(\d{4}-\d{2}-\d{2}[^\s.,;]*(?: \d{2}:\d{2}(?::\d{2})?)?(?: UTC)?)/
-      .exec(text(resume));
-    var next = "";
+    var stamp = /Updated:?\s*(\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?(?:Z|[+-]\d{2}:?\d{2}| UTC)?)/;
+    var updatedMatch = stamp.exec(text(resume));
+    var updated = updatedMatch ? updatedMatch[1] : "";
+    var next = "", nextRow = null;
     if (resume) {
       resume.querySelectorAll("tr").forEach(function (row) {
-        if (!next && /^next action$/i.test(text(row.cells[0]))) {
+        if (!nextRow && /^next action$/i.test(text(row.cells[0]))) {
+          nextRow = row;
           next = text(row.cells[1]);
         }
       });
     }
+    var lineText = text(statusLine);
     if (!next) {
-      var fromLine = /Next action:\s*(.*)$/
-        .exec(text(document.getElementById("status-line")));
+      var fromLine = /Next action:\s*(.*)$/.exec(lineText);
       next = fromLine ? fromLine[1] : "";
     }
-    var state = document.querySelector("[data-plan-status]");
-    var outcome = document.getElementById("outcome");
-    window.parent.postMessage({ type: "plan-summary", version: 1, summary: {
-      title: text(document.querySelector("h1")) || document.title,
-      status: state ? state.getAttribute("data-plan-status")
-        .split("(")[0].trim() : "",
-      statusToken: text(state),
-      updated: updated ? updated[1] : "",
-      modified: document.lastModified,
-      outcome: outcome ? text(outcome.querySelector("blockquote")) : "",
-      nextAction: next,
-      total: total, terminal: closed, percent: pct, counts: counts,
-      inProgress: running, blocked: blocked, unknown: unknown
-    } }, location.protocol === "file:" ? "*" : location.origin);
+
+    // A plans index loads this page in a hidden frame and reads this message.
+    if (window.parent !== window) {
+      var owner = /Owner:\s*(.+?)\s*(?:·|\.\s+[A-Z][A-Za-z ()]*:|\.?$)/
+        .exec(lineText);
+      var outcome = document.getElementById("outcome");
+      window.parent.postMessage({ type: "plan-summary", version: 2, summary: {
+        title: text(document.querySelector("h1")) || document.title,
+        status: planStatus, statusToken: text(state),
+        updated: updated, modified: document.lastModified,
+        owner: owner ? owner[1] : "",
+        outcome: outcome ? text(outcome.querySelector("blockquote")) : "",
+        nextAction: next,
+        total: total, terminal: closed, percent: pct, counts: counts,
+        inProgress: running, blocked: blocked, unknown: unknown,
+        phases: phases
+      } }, location.protocol === "file:" ? "*" : location.origin);
+      // A hidden frame needs only the message. Build the tools on display.
+      // A frame that shows later gets no resize event, so watch the root.
+      if (!window.innerWidth) {
+        var started = false, watcher = null;
+        var start = function () {
+          if (started || !window.innerWidth) { return; }
+          started = true;
+          window.removeEventListener("resize", start);
+          if (watcher) { watcher.disconnect(); }
+          enhance();
+        };
+        if ("ResizeObserver" in window) {
+          watcher = new ResizeObserver(start);
+          watcher.observe(document.documentElement);
+        }
+        window.addEventListener("resize", start);
+        return;
+      }
+    }
+    enhance();
+
+    // Everything below adds navigation and filters. Without the script the
+    // page is complete; print hides these tools and undoes the clamps.
+    function enhance() {
+      var root = document.documentElement;
+      var ledger = document.getElementById("ledger");
+      var tasks = {};
+      document.querySelectorAll("[id^='task-']").forEach(function (node) {
+        tasks[node.id.slice(5)] = node;
+      });
+      var DAY = 86400000;
+      var updatedAt = (function () {
+        if (!updated) { return NaN; }
+        var v = updated.replace(/ UTC$/, "Z").replace(" ", "T");
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) { v += "T00:00Z"; }
+        return Date.parse(v);
+      })();
+      var ageMs = Date.now() - updatedAt;
+      function ago(ms) {
+        var minutes = Math.round(ms / 60000);
+        if (minutes < 60) { return minutes + " min"; }
+        if (minutes < 2880) { return Math.round(minutes / 60) + " h"; }
+        return Math.round(minutes / 1440) + " d";
+      }
+      var hasAge = !isNaN(updatedAt) && ageMs >= 0;
+
+      // Lifecycle banner for every plan that is not active.
+      if (statusLine && planStatus && planStatus !== "active") {
+        var note = el("p", { "class": "lifecycle", role: "note" });
+        var sentence = planNotes[planStatus] ||
+          "Unknown plan status: " + text(state) + ".";
+        var dot = sentence.indexOf(". ");
+        note.appendChild(el("strong", { text: dot > 0 ?
+          sentence.slice(0, dot + 1) : sentence }));
+        if (dot > 0) { note.appendChild(document.createTextNode(sentence.slice(dot + 1))); }
+        var successor = null, qualifier = (/\(([^)]*)\)/.exec(
+          state.getAttribute("data-plan-status") + text(state)) || [])[1];
+        statusLine.querySelectorAll("a").forEach(function (link) {
+          var before = link.previousSibling ? link.previousSibling.textContent : "";
+          if (!successor && (/Successor:?\s*$/.test(before) ||
+            (qualifier && (link.getAttribute("href") || "").indexOf(qualifier) >= 0))) {
+            successor = link;
+          }
+        });
+        if (successor && planStatus === "superseded") {
+          note.appendChild(document.createTextNode(" Read "));
+          note.appendChild(successor.cloneNode(true));
+          note.appendChild(document.createTextNode("."));
+        }
+        statusLine.parentNode.insertBefore(note, statusLine.nextSibling);
+      }
+
+      // Resume state: mark the next action and show the stamp's age.
+      if (nextRow) { nextRow.classList.add("next"); }
+      if (resume && hasAge) {
+        var walker = document.createTreeWalker(resume, NodeFilter.SHOW_TEXT);
+        for (var node = walker.nextNode(); node; node = walker.nextNode()) {
+          var hit = stamp.exec(node.data);
+          if (hit) {
+            node.splitText(hit.index + hit[0].length);
+            node.parentNode.insertBefore(el("span", { "class": "age",
+              text: " (" + ago(ageMs) + " ago)" }), node.nextSibling);
+            break;
+          }
+        }
+      }
+
+      // Ledger rows: unknown marks, links to task bodies, evidence clamps.
+      var clamps = [];
+      items.forEach(function (item) {
+        var row = item.row, cells = row.cells;
+        if (!item.known) {
+          row.classList.add("unknown-status");
+          var code = cells[2] && cells[2].querySelector("code");
+          if (code) {
+            code.title = item.status + " is not a task status. It counts as to do.";
+          }
+        }
+        if (cells[0] && tasks[row.id] && !cells[0].querySelector("a")) {
+          var link = el("a", { href: "#task-" + row.id });
+          while (cells[0].firstChild) { link.appendChild(cells[0].firstChild); }
+          cells[0].appendChild(link);
+        }
+        var cell = cells[3];
+        if (!cell) { return; }
+        var words = cell.textContent.split(/\s+/).filter(Boolean).length;
+        // Short cells never clamp, so only long ones are measured.
+        if (words < 36) { return; }
+        var wrap = el("div", { "class": "ev clamp", id: "ev-" + row.id });
+        while (cell.firstChild) { wrap.appendChild(cell.firstChild); }
+        var toggle = el("button", { type: "button", "class": "ev-toggle",
+          "aria-expanded": "false", "aria-controls": wrap.id, hidden: "" });
+        var clamp = { row: row, wrap: wrap, button: toggle, open: false,
+          label: "Show all (" + words.toLocaleString("en") + " words)" };
+        toggle.textContent = clamp.label;
+        toggle.addEventListener("click", function () { setOpen(clamp, !clamp.open); });
+        cell.appendChild(wrap);
+        cell.appendChild(toggle);
+        clamps.push(clamp);
+      });
+      function setOpen(clamp, open) {
+        clamp.open = open;
+        clamp.wrap.classList.toggle("open", open);
+        clamp.button.setAttribute("aria-expanded", String(open));
+        clamp.button.textContent = open ? "Show less" : clamp.label;
+        if (!open && clamp.button.getBoundingClientRect().top < 0) {
+          clamp.row.scrollIntoView();
+        }
+      }
+
+      // Task bodies: a status chip that links back to the ledger row.
+      Object.keys(tasks).forEach(function (id) {
+        var item = byId[id], body = tasks[id];
+        if (!item) { return; }
+        var heading = /^H[1-6]$/.test(body.tagName) ? body :
+          body.querySelector("h2, h3, h4, h5, h6");
+        var token = text(item.row.cells[2]) || item.status;
+        var chip = el("a", { "class": "chip" + (item.known ? "" : " unknown-status"),
+          href: "#" + id, "data-status": item.row.getAttribute("data-status"),
+          title: "Ledger row " + id + ": " + token,
+          "aria-label": "Ledger row " + id + ", status " + token },
+          [el("code", { text: token })]);
+        if (heading) { heading.appendChild(chip); }
+        else { body.insertBefore(chip, body.firstChild); }
+      });
+
+      // Execution log: link each Item token that names a ledger row.
+      document.querySelectorAll("#execution-log table tbody tr").forEach(function (row) {
+        var cell = row.cells[1];
+        if (!cell) { return; }
+        var walk = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+        var found = [];
+        for (var n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (!(n.parentNode.closest && n.parentNode.closest("a"))) { found.push(n); }
+        }
+        found.forEach(function (textNode) {
+          var source = textNode.data, last = 0, frag = null, m;
+          var token = /[A-Za-z][A-Za-z0-9]*(?:[.-][A-Za-z0-9]+)*/g;
+          while ((m = token.exec(source))) {
+            if (!own.call(byId, m[0])) { continue; }
+            frag = frag || document.createDocumentFragment();
+            frag.appendChild(document.createTextNode(source.slice(last, m.index)));
+            frag.appendChild(el("a", { href: "#" + m[0], text: m[0] }));
+            last = m.index + m[0].length;
+          }
+          if (!frag) { return; }
+          frag.appendChild(document.createTextNode(source.slice(last)));
+          textNode.parentNode.replaceChild(frag, textNode);
+        });
+      });
+
+      // Filter state lives in the query string; the hash stays for rows.
+      var view = { status: "all", q: "", phase: "" };
+      var filterKeys = ["all", "done", "in_progress", "blocked", "todo",
+        "removed", "unknown"];
+      try {
+        var params = new URLSearchParams(location.search);
+        if (filterKeys.indexOf(params.get("status")) > 0) {
+          view.status = params.get("status");
+        }
+        view.q = (params.get("q") || "").trim();
+        if (own.call(phaseOf, params.get("phase"))) { view.phase = params.get("phase"); }
+      } catch (e) { /* An old browser keeps the default view. */ }
+      var pressers = [];
+
+      // Progress: legend items and phase rows become ledger filters.
+      if (progress && ledger) {
+        progress.querySelectorAll(".legend li[data-seg]").forEach(function (li) {
+          var key = li.getAttribute("data-seg");
+          var extra = li.querySelector(".unknown-n");
+          if (extra) { li.removeChild(extra); }
+          var button = el("button", { type: "button", "data-filter": key,
+            "aria-pressed": "false",
+            title: "Show " + names[key].toLowerCase() + " rows in the ledger" });
+          while (li.firstChild) { button.appendChild(li.firstChild); }
+          li.appendChild(button);
+          pressers.push(button);
+          if (extra) {
+            var more = el("button", { type: "button", "class": "unknown-btn",
+              "data-filter": "unknown", "aria-pressed": "false",
+              title: "Show rows with a status outside the format" }, [extra]);
+            li.appendChild(more);
+            pressers.push(more);
+          }
+        });
+        if (phases.length) {
+          var list = el("ul", { "class": "phases", "aria-label": "Phase progress" });
+          phases.forEach(function (phase) {
+            var button = el("button", { type: "button", "data-phase": phase.key,
+              "aria-pressed": "false",
+              "aria-label": phase.key + ": " + phase.terminal + " of " +
+                phase.total + " terminal, " + phase.counts.in_progress +
+                " in progress, " + phase.counts.blocked + " blocked" },
+              [el("span", { "class": "key", text: phase.key }),
+                makeBar("thin", phase.counts, phase.total),
+                el("span", { "class": "frac", text: phase.terminal + "/" + phase.total })]);
+            list.appendChild(el("li", {}, [button]));
+            pressers.push(button);
+          });
+          var anchor = progress.querySelector(".counts");
+          progress.insertBefore(list, anchor && anchor.parentNode === progress ?
+            anchor : null);
+        }
+      }
+
+      // Ledger toolbar.
+      var tools = null, search = null, phaseSelect = null, rowCount = null;
+      var clearButton = null, expandButton = null;
+      if (ledger && rows.length) {
+        var filterCounts = { all: total, todo: todoOnly, unknown: unknown.length };
+        var group = el("div", { "class": "seg-group", role: "group",
+          "aria-label": "Filter rows by status" });
+        ["all"].concat(order, unknown.length ? ["unknown"] : []).forEach(function (key) {
+          var n = own.call(filterCounts, key) ? filterCounts[key] : counts[key];
+          var label = key === "all" ? "All" : key === "unknown" ? "Unknown" :
+            key === "removed" ? "Deferred, no-action, rejected" : names[key];
+          var kids = key === "all" ? [] :
+            [el("span", { "class": "swatch", "data-seg": key, "aria-hidden": "true" })];
+          var button = el("button", { type: "button", "class": "tool" +
+            (n ? "" : " zero"), "data-filter": key, "aria-pressed": "false" },
+            kids.concat([label + " ", el("span", { "class": "n", text: String(n) })]));
+          group.appendChild(button);
+          pressers.push(button);
+        });
+        search = el("input", { type: "search", placeholder: "Search ledger",
+          autocomplete: "off", spellcheck: "false", "aria-keyshortcuts": "/" });
+        var row = el("div", { "class": "tool-row" }, [
+          el("label", { "class": "field search" },
+            [el("span", { text: "Search" }), search, el("kbd", { text: "/" })])]);
+        if (phases.length) {
+          phaseSelect = el("select", {}, [el("option", { value: "", text: "All phases" })]);
+          phases.forEach(function (phase) {
+            phaseSelect.appendChild(el("option", { value: phase.key,
+              text: phase.key + " (" + phase.terminal + "/" + phase.total + ")" }));
+          });
+          row.appendChild(el("label", { "class": "field" },
+            [el("span", { text: "Phase" }), phaseSelect]));
+        }
+        if (clamps.length) {
+          expandButton = el("button", { type: "button", "class": "tool",
+            "aria-pressed": "false", text: "Expand all evidence" });
+          row.appendChild(expandButton);
+        }
+        clearButton = el("button", { type: "button", "class": "link-btn",
+          text: "Clear filters", hidden: "" });
+        rowCount = el("p", { "class": "row-count", role: "status",
+          "aria-live": "polite" });
+        row.appendChild(clearButton);
+        row.appendChild(rowCount);
+        tools = el("div", { "class": "ledger-tools" }, [group, row]);
+        var table = ledger.querySelector("table");
+        if (table) { table.parentNode.insertBefore(tools, table); }
+
+        var timer = 0;
+        search.addEventListener("input", function () {
+          clearTimeout(timer);
+          timer = setTimeout(function () { view.q = search.value.trim(); apply(); }, 120);
+        });
+        search.addEventListener("keydown", function (event) {
+          if (event.key !== "Escape") { return; }
+          event.preventDefault();
+          if (search.value) { search.value = ""; view.q = ""; apply(); }
+          else { search.blur(); }
+        });
+        if (phaseSelect) {
+          phaseSelect.addEventListener("change", function () {
+            view.phase = phaseSelect.value; apply();
+          });
+        }
+        if (expandButton) {
+          expandButton.addEventListener("click", function () {
+            var on = !ledger.classList.contains("ev-all");
+            ledger.classList.toggle("ev-all", on);
+            expandButton.setAttribute("aria-pressed", String(on));
+            if (!on) { measure(); }
+          });
+        }
+        clearButton.addEventListener("click", function () {
+          view = { status: "all", q: "", phase: "" };
+          apply();
+          search.focus();
+        });
+      }
+      pressers.forEach(function (button) {
+        button.addEventListener("click", function () {
+          var key = button.getAttribute("data-filter");
+          var phase = button.getAttribute("data-phase");
+          if (key) { view.status = view.status === key && key !== "all" ? "all" : key; }
+          if (phase) { view.phase = view.phase === phase ? "" : phase; }
+          apply();
+          // Legend and phase buttons sit above the ledger: go to it.
+          if (!button.closest(".ledger-tools")) { ledger.scrollIntoView(); }
+        });
+      });
+
+      function matches(item) {
+        var want = view.status;
+        if (want === "unknown" && item.known) { return false; }
+        if (want === "todo" && (!item.known || item.seg !== "todo")) { return false; }
+        if (want !== "all" && want !== "unknown" && want !== "todo" &&
+          item.seg !== want) { return false; }
+        if (view.phase && item.phase !== view.phase) { return false; }
+        if (!view.q) { return true; }
+        item.hay = item.hay || item.row.textContent.toLowerCase();
+        return view.q.toLowerCase().split(/\s+/).every(function (word) {
+          return item.hay.indexOf(word) >= 0;
+        });
+      }
+      function apply() {
+        var shown = 0;
+        items.forEach(function (item) {
+          var ok = matches(item);
+          item.row.classList.toggle("filtered-out", !ok);
+          if (ok) { shown += 1; }
+        });
+        pressers.forEach(function (button) {
+          var key = button.getAttribute("data-filter");
+          var phase = button.getAttribute("data-phase");
+          button.setAttribute("aria-pressed", String(key ? view.status === key :
+            view.phase === phase));
+        });
+        var filtered = view.status !== "all" || view.q || view.phase;
+        if (search && search.value.trim() !== view.q) { search.value = view.q; }
+        if (phaseSelect) { phaseSelect.value = view.phase; }
+        if (clearButton) { clearButton.hidden = !filtered; }
+        if (rowCount) {
+          rowCount.textContent = !filtered ? "Showing all " + total + " rows." :
+            shown ? "Showing " + shown + " of " + total + " rows." :
+            "No row matches. " + total + " rows hidden.";
+        }
+        try {
+          var query = new URLSearchParams(location.search);
+          [["status", view.status === "all" ? "" : view.status],
+            ["q", view.q], ["phase", view.phase]].forEach(function (pair) {
+            if (pair[1]) { query.set(pair[0], pair[1]); } else { query.delete(pair[0]); }
+          });
+          var qs = query.toString();
+          history.replaceState(history.state, "",
+            (qs ? "?" + qs : location.pathname) + location.hash);
+        } catch (e) { /* The view still works without the URL. */ }
+      }
+
+      // A link to a hidden row clears the filter first.
+      function reveal(id) {
+        var target = id && document.getElementById(id);
+        if (!target) { return null; }
+        var row = target.closest && target.closest("#ledger tbody tr");
+        if (row && row.classList.contains("filtered-out")) {
+          view = { status: "all", q: "", phase: "" };
+          apply();
+        }
+        clamps.forEach(function (clamp) {
+          if (clamp.wrap.contains(target) && !clamp.open) { setOpen(clamp, true); }
+        });
+        return target;
+      }
+      function hashId() {
+        try { return decodeURIComponent(location.hash.slice(1)); }
+        catch (e) { return location.hash.slice(1); }
+      }
+
+      // Sticky plan bar built from the top-level sections.
+      var sections = [].slice.call(document.querySelectorAll("section[id]"))
+        .filter(function (section) {
+          return !section.parentNode.closest("section[id]") &&
+            section.querySelector("h2");
+        });
+      var primary = { "progress": "Progress", "current-resume-state": "Resume",
+        "ledger": "Ledger", "tasks": "Tasks", "execution-log": "Log" };
+      var navLinks = [];
+      var planbar = el("div", { "class": "planbar" });
+      var heading = document.querySelector("h1");
+      var idBox = el("div", { "class": "pb-id" }, [
+        el("a", { "class": "pb-title",
+          href: document.getElementById("overview") ? "#overview" : "#",
+          title: "Back to the top", text: text(heading) || document.title })]);
+      if (planStatus) {
+        idBox.appendChild(el("code", { title: "Plan status: " + text(state),
+          text: planStatus }));
+      }
+      if (total) {
+        idBox.appendChild(el("span", { "class": "pb-progress",
+          title: closed + " of " + total + " tasks terminal" },
+          [makeBar("mini", counts, total), pct + "%"]));
+      }
+      if (hasAge) {
+        var days = ageMs / DAY;
+        // Only an active plan goes stale: other states wait by design.
+        var live = planStatus === "active" || !planStatus;
+        var tier = !live ? "" : days >= 7 ? " stale" : days >= 3 ? " aging" : "";
+        idBox.appendChild(el("span", { "class": "pb-upd" + tier,
+          title: "Updated: " + updated,
+          text: tier === " stale" ? "Stale · " + Math.floor(days) + " d" :
+            "Updated " + ago(ageMs) + " ago" }));
+      }
+      planbar.appendChild(idBox);
+      var nav = el("nav", { "class": "pb-nav", "aria-label": "Plan sections" });
+      var mainList = el("ul"), moreList = el("ul");
+      sections.forEach(function (section) {
+        var label = primary[section.id] || text(section.querySelector("h2"));
+        var link = el("a", { href: "#" + section.id, "data-section": section.id,
+          text: label });
+        (primary[section.id] ? mainList : moreList).appendChild(el("li", {}, [link]));
+        navLinks.push(link);
+      });
+      nav.appendChild(mainList);
+      var more = null;
+      if (moreList.children.length) {
+        more = el("details", { "class": "pb-more" },
+          [el("summary", { text: "More" }), moreList]);
+        nav.appendChild(more);
+      }
+      if (sections.length) { planbar.appendChild(nav); }
+      document.body.insertBefore(planbar, document.body.firstChild);
+
+      // One read pass, then one write pass: no layout thrash.
+      function measure() {
+        if (ledger && ledger.classList.contains("ev-all")) { return; }
+        var live = clamps.filter(function (clamp) {
+          return !clamp.open && !clamp.row.classList.contains("filtered-out");
+        });
+        live.forEach(function (clamp) { clamp.wrap.classList.add("clamp"); });
+        var over = live.map(function (clamp) {
+          return clamp.wrap.scrollHeight > clamp.wrap.clientHeight + 2;
+        });
+        live.forEach(function (clamp, i) {
+          clamp.wrap.classList.toggle("clamp", over[i]);
+          clamp.button.hidden = !over[i];
+        });
+      }
+      function sizes() {
+        var thead = ledger && ledger.querySelector("thead");
+        var barHeight = planbar.offsetHeight;
+        var headHeight = thead ? thead.offsetHeight : 0;
+        root.style.setProperty("--pb-h", barHeight + "px");
+        if (headHeight) { root.style.setProperty("--th-h", headHeight + "px"); }
+        return barHeight;
+      }
+      measure();
+      var barHeight = sizes();
+      apply();
+      var initial = reveal(hashId());
+      if (initial) { initial.scrollIntoView(); }
+
+      var width = window.innerWidth, resizeTimer = 0;
+      window.addEventListener("resize", function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+          sizes();
+          if (window.innerWidth !== width) { width = window.innerWidth; measure(); }
+        }, 200);
+      });
+
+      // Mark the section in view.
+      if ("IntersectionObserver" in window && sections.length) {
+        var seen = {};
+        var observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            seen[entry.target.id] = entry.isIntersecting;
+          });
+          var current = "";
+          for (var i = 0; i < sections.length; i += 1) {
+            if (seen[sections[i].id]) { current = sections[i].id; break; }
+          }
+          navLinks.forEach(function (link) {
+            if (link.getAttribute("data-section") === current) {
+              link.setAttribute("aria-current", "true");
+            } else { link.removeAttribute("aria-current"); }
+          });
+          if (more) {
+            more.classList.toggle("has-current",
+              !!more.querySelector("[aria-current]"));
+          }
+        }, { rootMargin: "-" + (barHeight + 8) + "px 0px -55% 0px" });
+        sections.forEach(function (section) { observer.observe(section); });
+      }
+
+      // Keyboard and link handling.
+      document.addEventListener("click", function (event) {
+        var link = event.target.closest && event.target.closest("a[href^='#']");
+        if (more && more.open && !more.contains(event.target)) { more.open = false; }
+        if (!link) { return; }
+        if (more && more.contains(link)) { more.open = false; }
+        var id = link.getAttribute("href").slice(1);
+        try { id = decodeURIComponent(id); } catch (e) { /* Keep the raw id. */ }
+        reveal(id);
+      }, true);
+      window.addEventListener("hashchange", function () {
+        var target = reveal(hashId());
+        if (target) { target.scrollIntoView(); }
+      });
+      document.addEventListener("keydown", function (event) {
+        var field = /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) ||
+          event.target.isContentEditable;
+        if (event.key === "Escape" && more && more.open) {
+          more.open = false;
+          more.querySelector("summary").focus();
+        } else if (event.key === "/" && search && !field && !event.ctrlKey &&
+          !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          search.focus();
+          search.select();
+        }
+      });
+    }
   });
 </script>
 </head>
@@ -237,31 +1080,7 @@
     Next action: see <a href="#current-resume-state">Current resume state</a>
   </p>
 
-  <section id="current-resume-state">
-    <h2>Current resume state</h2>
-    <p>Updated: 2026-01-01 UTC.</p>
-    <table>
-      <thead><tr><th>Field</th><th>Current state</th></tr></thead>
-      <tbody>
-        <tr><td>In progress</td><td>None. This plan is a draft. [Per task: ID link, owner]</td></tr>
-        <tr><td>Next action</td><td>Complete the promotion gate.</td></tr>
-        <tr><td>Worktree</td><td>[Per in-progress task: path, branch, HEAD, dirty-file inventory or clean]</td></tr>
-        <tr><td>Verification</td><td>None. No implementation started.</td></tr>
-        <tr><td>Running processes</td><td>None.</td></tr>
-        <tr><td>Required reads</td><td>[in-progress task contracts and relevant current proof]</td></tr>
-        <tr><td>Unresolved</td><td>[decision or blocker, or none]</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section id="outcome">
-    <h2>Outcome</h2>
-    <blockquote>
-      One quotable paragraph that states the invariant this plan delivers.
-      A reviewer holds the whole plan against it.
-    </blockquote>
-  </section>
-
+  <!-- Progress comes first. The script computes it from the ledger. -->
   <section id="progress">
     <div class="progress-head">
       <h2>Progress <span class="pct"></span></h2>
@@ -279,6 +1098,31 @@
     </div>
     <p class="counts">Progress appears here when the page loads. The status
       ledger below is the source of truth.</p>
+  </section>
+
+  <section id="current-resume-state">
+    <h2>Current resume state</h2>
+    <p>Updated: 2026-01-01 UTC.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Current state</th></tr></thead>
+      <tbody>
+        <tr><td>Next action</td><td>Complete the promotion gate.</td></tr>
+        <tr><td>In progress</td><td>None. This plan is a draft. [Per task: ID link, owner]</td></tr>
+        <tr><td>Worktree</td><td>[Per in-progress task: path, branch, HEAD, dirty-file inventory or clean]</td></tr>
+        <tr><td>Verification</td><td>None. No implementation started.</td></tr>
+        <tr><td>Running processes</td><td>None.</td></tr>
+        <tr><td>Required reads</td><td>[in-progress task contracts and relevant current proof]</td></tr>
+        <tr><td>Unresolved</td><td>[decision or blocker, or none]</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="outcome">
+    <h2>Outcome</h2>
+    <blockquote>
+      One quotable paragraph that states the invariant this plan delivers.
+      A reviewer holds the whole plan against it.
+    </blockquote>
   </section>
 
   <section id="architecture">
@@ -354,6 +1198,8 @@
 
   <section id="ledger">
     <h2>Status ledger</h2>
+    <!-- One row per task, on one line. The evidence cell leads with the
+         current result. -->
     <table>
       <thead>
         <tr><th>ID</th><th>Task</th><th>Status</th><th>Evidence</th></tr>

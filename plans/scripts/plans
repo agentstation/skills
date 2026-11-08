@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""Check and upgrade HTML plans and plans index pages.
+
+  plans check FILE...          Report broken links and plan format defects.
+  plans upgrade [--dry-run] FILE...
+                               Replace the skill-owned blocks in each plan
+                               with the ones from assets/plan-template.html.
+
+The skill owns a plan's <style> and <script> blocks and its #progress
+section. An upgrade replaces them whole and places #progress directly
+before #current-resume-state. It leaves all plan content unchanged.
+"""
+
+import argparse
+import re
+import sys
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import unquote
+
+ASSETS = Path(__file__).resolve().parent.parent / "assets"
+PLAN_TEMPLATE = ASSETS / "plan-template.html"
+INDEX_TEMPLATE = ASSETS / "plans-index.html"
+
+PLAN_IDS = ["overview", "status-line", "progress", "current-resume-state",
+            "outcome", "architecture", "scope", "ledger", "tasks", "goal",
+            "execution-log"]
+TASK_STATUSES = {"todo", "in_progress", "blocked", "done", "deferred",
+                 "no-action", "rejected"}
+PLAN_STATUSES = {"draft", "proposed", "active", "deferred", "complete",
+                 "superseded", "abandoned"}
+
+STYLE_RE = re.compile(r"<style\b[^>]*>.*?</style>", re.S)
+SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.S)
+# The match takes one trailing blank line, which the upgrade inserts again,
+# so a second upgrade leaves the file unchanged.
+PROGRESS_RE = re.compile(
+    r'[ \t]*<section id="progress">.*?</section>[ \t]*(?:\n(?:[ \t]*\n)?)?',
+    re.S)
+VERSION_RE = re.compile(r'data-plans="(\d+)"')
+
+
+class Page(HTMLParser):
+    """Collect ids, links, ledger rows, and plan status from one page."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.ids = []
+        self.hrefs = []
+        self.rows = []
+        self.plan_status = None
+        self._section = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        node_id = attrs.get("id")
+        if node_id:
+            self.ids.append(node_id)
+        if tag == "a" and attrs.get("name"):
+            self.ids.append(attrs["name"])
+        if tag == "a" and attrs.get("href"):
+            self.hrefs.append(attrs["href"])
+        if "data-plan-status" in attrs and self.plan_status is None:
+            self.plan_status = attrs["data-plan-status"] or ""
+        if tag == "section":
+            self._section.append(node_id)
+        if (tag == "tr" and "ledger" in self._section
+                and "data-status" in attrs):
+            self.rows.append((node_id, attrs["data-status"] or ""))
+
+    def handle_endtag(self, tag):
+        if tag == "section" and self._section:
+            self._section.pop()
+
+
+_pages = {}
+
+
+def parse(path):
+    path = path.resolve()
+    if path not in _pages:
+        page = Page()
+        page.feed(path.read_text(encoding="utf-8"))
+        _pages[path] = page
+    return _pages[path]
+
+
+def template_version(path):
+    match = VERSION_RE.search(path.read_text(encoding="utf-8"))
+    return int(match.group(1)) if match else 0
+
+
+def bare(token):
+    return token.split("(")[0].strip()
+
+
+def check_links(path, page, report):
+    for href in page.hrefs:
+        if re.match(r"[a-z][a-z0-9+.-]*:", href):
+            continue
+        target, _, fragment = href.partition("#")
+        dest = path if not target else (
+            path.parent / unquote(target.split("?")[0]))
+        if not dest.exists():
+            report("error", "missing file: " + href)
+            continue
+        if fragment and dest.suffix == ".html":
+            if fragment not in parse(dest).ids:
+                report("error", "missing anchor: " + href)
+
+
+def check_plan(path, page, text, report):
+    ids = set(page.ids)
+    order = [i for i in page.ids if i in PLAN_IDS]
+    seen = []
+    for node_id in order:
+        if node_id not in seen:
+            seen.append(node_id)
+    for node_id in PLAN_IDS:
+        if node_id not in ids:
+            report("error", "missing section id: " + node_id)
+    expected = [i for i in PLAN_IDS if i in seen]
+    if seen != expected:
+        report("error", "section order: " + ", ".join(seen))
+    if page.plan_status is None:
+        report("error", "no data-plan-status in the status line")
+    elif bare(page.plan_status) not in PLAN_STATUSES:
+        report("error", "unknown plan status: " + page.plan_status)
+    styles = len(STYLE_RE.findall(text))
+    scripts = len(SCRIPT_RE.findall(text))
+    if styles != 1 or scripts != 1:
+        report("error", "expected one <style> and one <script>, found "
+               "%d and %d" % (styles, scripts))
+    have = VERSION_RE.search(text)
+    want = template_version(PLAN_TEMPLATE)
+    if not have or int(have.group(1)) < want:
+        report("warning", "skill blocks are older than version %d; run "
+               "plans upgrade" % want)
+    row_ids = [row_id for row_id, _ in page.rows]
+    for row_id, status in page.rows:
+        if not row_id:
+            report("error", "ledger row without an id")
+            continue
+        if bare(status) not in TASK_STATUSES:
+            report("warning", "%s: unknown task status %s, counted as to do"
+                   % (row_id, status))
+    for row_id in sorted({r for r in row_ids if r and row_ids.count(r) > 1}):
+        report("error", "duplicate ledger id: " + row_id)
+    unlinked = [r for r in row_ids if r and "task-" + r not in ids]
+    if unlinked:
+        report("note", "%d of %d ledger rows have no task-<ID> anchor: %s"
+               % (len(unlinked), len(row_ids), " ".join(unlinked[:8])
+                  + (" ..." if len(unlinked) > 8 else "")))
+
+
+def check(paths):
+    errors = 0
+    for name in paths:
+        path = Path(name)
+        text = path.read_text(encoding="utf-8")
+        page = parse(path)
+        found = []
+
+        def report(level, message):
+            found.append((level, message))
+
+        check_links(path, page, report)
+        if "ledger" in page.ids:
+            check_plan(path, page, text, report)
+        elif "plan-list" in page.ids:
+            have = VERSION_RE.search(text)
+            want = template_version(INDEX_TEMPLATE)
+            if not have or int(have.group(1)) < want:
+                report("warning", "index blocks are older than version %d"
+                       % want)
+        for level, message in found:
+            print("%s: %s: %s" % (name, level, message))
+        errors += sum(1 for level, _ in found if level == "error")
+    print("%d file(s), %d error(s)" % (len(paths), errors))
+    return 1 if errors else 0
+
+
+def one(pattern, text, what, name):
+    found = pattern.findall(text)
+    if len(found) != 1:
+        raise SystemExit("%s: expected one %s, found %d"
+                         % (name, what, len(found)))
+    return found[0]
+
+
+def upgrade(paths, dry_run):
+    source = PLAN_TEMPLATE.read_text(encoding="utf-8")
+    style = one(STYLE_RE, source, "<style>", PLAN_TEMPLATE)
+    script = one(SCRIPT_RE, source, "<script>", PLAN_TEMPLATE)
+    progress = one(PROGRESS_RE, source, "#progress", PLAN_TEMPLATE)
+    progress = progress.strip(" \t\n")
+    changed = 0
+    for name in paths:
+        path = Path(name)
+        text = path.read_text(encoding="utf-8")
+        old = one(PROGRESS_RE, text, "#progress", name)
+        # Progress is derived. Refuse a section that holds authored content.
+        if re.search(r"<(table|a|pre|figure)\b", old):
+            raise SystemExit(name + ": #progress holds authored content; "
+                             "move it out, then upgrade")
+        one(STYLE_RE, text, "<style>", name)
+        one(SCRIPT_RE, text, "<script>", name)
+        new = STYLE_RE.sub(lambda _: style, text, count=1)
+        new = SCRIPT_RE.sub(lambda _: script, new, count=1)
+        new = PROGRESS_RE.sub("", new, count=1)
+        anchor = re.search(r'([ \t]*)<section id="current-resume-state">', new)
+        if not anchor:
+            raise SystemExit(name + ": no #current-resume-state section")
+        indent = anchor.group(1)
+        block = "\n".join(indent + line if line else line
+                          for line in progress.split("\n")) + "\n\n"
+        new = new[:anchor.start()] + block + new[anchor.start():]
+        if new != text:
+            changed += 1
+            print(("would upgrade " if dry_run else "upgraded ") + name)
+            if not dry_run:
+                path.write_text(new, encoding="utf-8")
+        else:
+            print("current " + name)
+    print("%d of %d file(s) %s" % (changed, len(paths),
+                                    "need an upgrade" if dry_run
+                                    else "upgraded"))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+    check_cmd = sub.add_parser("check", help="report defects")
+    check_cmd.add_argument("files", nargs="+")
+    upgrade_cmd = sub.add_parser("upgrade", help="replace skill blocks")
+    upgrade_cmd.add_argument("--dry-run", action="store_true")
+    upgrade_cmd.add_argument("files", nargs="+")
+    args = parser.parse_args()
+    if args.command == "check":
+        return check(args.files)
+    return upgrade(args.files, args.dry_run)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

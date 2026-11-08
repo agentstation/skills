@@ -26,6 +26,8 @@ Markdown is the fallback when the repository requires it.
    [`references/html-format.md`](references/html-format.md) for the file
    and editing rules. When the plans directory has no index, copy
    [`assets/plans-index.html`](assets/plans-index.html) to `index.html`.
+   After each edit to an HTML plan or index, run `scripts/plans check` on
+   it. Run `scripts/plans upgrade` on a plan with older skill blocks.
 4. To execute or resume, follow
    [`references/execution.md`](references/execution.md): the goal block,
    the execution loop, the stop states, and closure.
