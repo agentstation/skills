@@ -175,6 +175,8 @@ The page has three sections:
    line, with the columns Item, Why it matters, and Trigger. Mark a trigger
    date as `<time datetime="YYYY-MM-DD">`, one per Trigger cell. The page
    marks a date that is due or near. A date in plain text gets no mark.
+   With no rows, the page hides the table and says that no open work is
+   without an owner.
 3. Routing: the rules, then `<ol id="plan-list">` under Execution order.
    This list is the manifest.
 
