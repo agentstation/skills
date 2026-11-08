@@ -246,8 +246,14 @@ evidence rules.
 
 ## The plans index
 
-When the repository keeps a plans directory, maintain an index README that
+When the repository keeps a plans directory, maintain an index that
 routes work. The index answers two questions: which plan owns the work, and
 in what order the plans run. Keep exactly one owner plan per topic. Keep
 history out of the index so it stays readable as the current control plane.
 Update the index in the same change as any plan lifecycle transition.
+
+For HTML plans, the index is `index.html`, copied from the index template.
+It reads status and progress live from each plan and shows only active
+plans. [`html-format.md`](html-format.md) defines the page and its manifest.
+Do not copy plan status into the index. For Markdown plans, the index is a
+README table of plan links in execution order.

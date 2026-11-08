@@ -27,6 +27,8 @@ agent copies a template and completes the required sections:
 - [`assets/plan-template.html`](assets/plan-template.html): the default
   artifact.
 - [`assets/plan-template.md`](assets/plan-template.md): the Markdown fallback.
+- [`assets/plans-index.html`](assets/plans-index.html): the plans index. It
+  reads each listed plan and shows live progress for the active plans.
 
 A plan with status `active` and a complete goal block runs without further
 prompting. Paste the goal block to start or resume execution. The agent runs
