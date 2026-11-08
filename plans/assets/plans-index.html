@@ -940,6 +940,17 @@
     }
     function setupUnowned() {
       if (!unownedSection) { return; }
+      updateTriggers();
+      // An empty table says so and shows no filter.
+      if (!rows.length) {
+        var table = unownedSection.querySelector("table");
+        if (table) {
+          table.hidden = true;
+          table.parentNode.insertBefore(el("p", { "class": "empty" },
+            ["No open work is without an owner."]), table.nextSibling);
+        }
+        return;
+      }
       rows.forEach(function (row, i) {
         var cell = row.cells[1];
         if (!cell) { return; }
@@ -988,7 +999,6 @@
       }
       window.addEventListener("hashchange", reveal);
       byId("unowned-tools").hidden = false;
-      updateTriggers();
       apply();
       reveal();
       var resizeTimer = 0;
