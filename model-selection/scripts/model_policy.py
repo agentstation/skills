@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 DATA = Path(__file__).resolve().parents[1] / 'data'
-POLICY_VERSION = 2
+POLICY_VERSION = 3
 ROLES = {'worker', 'reviewer', 'coordinator', 'specialist'}
 OPAQUE_MODELS = {'', 'auto', 'default', 'latest', 'inherit', 'automatic', 'claude', 'openai', 'anthropic'}
 
@@ -73,9 +73,9 @@ def _policy() -> dict[str, Any]:
         raise PolicyError('Unsupported role policy version')
     required_limits = {'blocked_families': ['haiku'], 'coordinator_only': ['fable'],
                        'focused_specialist_only': ['astra'],
-                       'ultracode_for_coordination_or_high_complexity': ['opus']}
+                       'ultracode_for_high_complexity_work': ['opus']}
     if any(value.get(key) != expected for key, expected in required_limits.items()):
-        raise PolicyError('Role policy version 2 requires all owner role restrictions')
+        raise PolicyError('Role policy version 3 requires all owner role restrictions')
     for key in ['aliases', 'default_efforts', 'runtime_models', 'taste']:
         if not isinstance(value.get(key), dict):
             raise PolicyError(f'Role policy requires {key}')
@@ -112,9 +112,9 @@ def _role_limits(model: str, role: str, complexity: str, focused: bool, ultracod
     if any(name in leaf for name in _policy()['focused_specialist_only']):
         if role != 'specialist' or complexity != 'high' or not focused:
             raise PolicyError('Astra requires a narrow, highly complex focused specialist assignment')
-    if any(name in leaf for name in _policy()['ultracode_for_coordination_or_high_complexity']):
-        if (role == 'coordinator' or complexity == 'high') and not ultracode:
-            raise PolicyError('Opus coordination or high-complexity work requires multi-agent Ultracode')
+    if any(name in leaf for name in _policy()['ultracode_for_high_complexity_work']):
+        if role != 'coordinator' and complexity == 'high' and not ultracode:
+            raise PolicyError('High-complexity Opus work outside coordination requires multi-agent Ultracode')
 
 
 def frontier() -> list[dict[str, Any]]:
@@ -245,8 +245,8 @@ def check_global_instructions(path: Path) -> None:
         'Do not assign Fable implementation tasks or isolated code-review jobs.',
         'Apply this role limit to manual profiles, automatic selection, and fallback.',
         'Reserve Astra for a narrow, highly complex problem that needs sustained deep',
-        'Require multi-agent',
-        'Ultracode for Opus orchestration or highly complex work.',
+        'Opus may coordinate without Ultracode.',
+        'Require multi-agent Ultracode for other highly complex Opus work.',
     ]
     text = re.sub(r'\s+', ' ', source)
     if any(re.sub(r'\s+', ' ', rule) not in text for rule in required):

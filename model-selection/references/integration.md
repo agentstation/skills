@@ -36,6 +36,7 @@ A third-provider adapter without effort control may use `None`.
 This allowance does not make unknown models eligible for automatic ranking.
 
 Policy version 2 changes reviewer eligibility.
+Policy version 3 lets Opus coordinate without Ultracode.
 Autoreview config schema version 1 remains readable.
 Its legacy `value` profile resolves to Sol high.
 A Fable review request fails rather than changing the requested model silently.
