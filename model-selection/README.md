@@ -25,12 +25,14 @@ export MODEL_SELECTION="${AGENTS_HOME:-$HOME/.agents}/skills/model-selection/scr
 The catalog uses AA identifiers for comparison and runtime identifiers for dispatch.
 For example, `gpt-6-1-sol` maps to `gpt-6.1-sol`.
 
-## Version 2 policy
+## Version 3 policy
 
 Config schema versions and policy versions are separate contracts.
-Policy version 2 reserves Fable for coordination and rejects Haiku.
+Policy version 3 reserves Fable for coordination and rejects Haiku.
 It restricts Astra to narrow, highly complex, focused specialist work.
-It requires multi-agent Ultracode for Opus coordination or high-complexity work.
+Opus may coordinate without Ultracode.
+Other high-complexity Opus work requires multi-agent Ultracode.
+Version 2 also required Ultracode for Opus coordination.
 These restrictions also govern explicit profiles and fallback.
 
 The autoreview `value` profile now selects Sol high.

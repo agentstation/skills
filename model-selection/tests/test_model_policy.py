@@ -48,11 +48,18 @@ class PolicyTests(unittest.TestCase):
                                             complexity='high', focused=True)
         self.assertEqual(result['model'],'gpt-6-astra')
 
-    def test_opus_complex_work_requires_ultracode(self):
-        for role,complexity in [('coordinator','routine'),('worker','high')]:
+    def test_opus_coordinates_without_ultracode(self):
+        for complexity in ['routine','high']:
+            with self.subTest(complexity=complexity):
+                result = POLICY.validate_assignment('opus','high',role='coordinator',complexity=complexity)
+                self.assertEqual(result['role'],'coordinator')
+
+    def test_opus_complex_work_outside_coordination_requires_ultracode(self):
+        for role in ['worker','reviewer','specialist']:
             with self.subTest(role=role), self.assertRaises(POLICY.PolicyError):
-                POLICY.validate_assignment('opus','high',role=role,complexity=complexity)
-            POLICY.validate_assignment('opus','high',role=role,complexity=complexity,ultracode=True)
+                POLICY.validate_assignment('opus','high',role=role,complexity='high')
+            POLICY.validate_assignment('opus','high',role=role,complexity='high',ultracode=True)
+        POLICY.validate_assignment('opus','high',role='worker',complexity='routine')
 
     def test_dominated_and_retired_pairs_are_not_routine_workers(self):
         for model,effort in [('opus','medium'),('sonnet','high'),('gpt-5.6-terra','max'),
@@ -177,7 +184,8 @@ class PolicyTests(unittest.TestCase):
             'Do not assign Fable implementation tasks or isolated code-review jobs.',
             'Apply this role limit to manual profiles, automatic selection, and fallback.',
             'Reserve Astra for a narrow, highly complex problem that needs sustained deep focus.',
-            'Require multi-agent Ultracode for Opus orchestration or highly complex work.',
+            'Opus may coordinate without Ultracode.',
+            'Require multi-agent Ultracode for other highly complex Opus work.',
         ]
         source = POLICY.render_table() + '\n'.join(clauses) + '\n'
         with tempfile.TemporaryDirectory() as directory:

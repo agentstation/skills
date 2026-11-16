@@ -35,7 +35,8 @@ export MODEL_SELECTION="${AGENTS_HOME:-$HOME/.agents}/skills/model-selection/scr
 The role policy applies before explicit profiles, ranking, and fallback.
 Fable only coordinates work. Do not use Haiku.
 Astra requires a narrow, highly complex, focused specialist assignment.
-Opus coordination or high-complexity work requires multi-agent Ultracode.
+Opus may coordinate without Ultracode.
+Other high-complexity Opus work requires multi-agent Ultracode.
 The caller must verify those task conditions before setting the corresponding flags.
 
 ## Refresh evidence

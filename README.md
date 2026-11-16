@@ -52,6 +52,7 @@ metadata.
 Install `model-selection` before `autoreview` or `codex-delegation`.
 Project adapters keep local criteria and call the shared skills.
 Model policy version 2 removes Fable review eligibility, including explicit profiles.
+Model policy version 3 lets Opus coordinate without Ultracode.
 See [the migration contract](model-selection/references/integration.md).
 
 ## Make a skill unconditional
