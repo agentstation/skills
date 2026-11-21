@@ -11,6 +11,7 @@ Reusable Agent Skills for Claude Code, Codex, and compatible hosts.
 | `model-selection` | Validates model roles and effort against the dated Pareto frontier. | [model-selection/README.md](model-selection/README.md) |
 | `codex-delegation` | Dispatches scoped Codex work through the native host interface. | [codex-delegation/README.md](codex-delegation/README.md) |
 | `autoreview` | Runs an isolated second-model code review at a pre-PR gate or a configured checkpoint. | [autoreview/README.md](autoreview/README.md) |
+| `pr` | Runs the local gate before a pull request in a repository with no remote pull-request CI. | [pr/README.md](pr/README.md) |
 | `plans` | Keeps a durable plan that owns one outcome, with a status ledger, verifiable task criteria, and autonomous execution. | [plans/README.md](plans/README.md) |
 | `technical-writing` | Applies controlled, lintable writing rules to developer-facing prose. | [technical-writing/README.md](technical-writing/README.md) |
 | `starport` | Operates a self-hosted Starport LLM inference gateway: install, start, catalog questions, and diagnosis. | [starport/README.md](starport/README.md) |
@@ -27,6 +28,7 @@ npx skills add agentstation/skills --skill model-selection -g -a codex -a claude
 npx skills add agentstation/skills --skill codex-delegation -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill autoreview -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill plans -g -a codex -a claude-code -y
+npx skills add agentstation/skills --skill pr -g -a codex -a claude-code -y
 npx skills add agentstation/skills --skill technical-writing -g \
   -a codex -a claude-code -a goose -y
 ```
@@ -50,6 +52,7 @@ install helps during development, but it records no updateable GitHub source
 metadata.
 
 Install `model-selection` before `autoreview` or `codex-delegation`.
+Install `autoreview` before `pr`.
 Project adapters keep local criteria and call the shared skills.
 Model policy version 2 removes Fable review eligibility, including explicit profiles.
 Model policy version 3 lets Opus coordinate without Ultracode.
