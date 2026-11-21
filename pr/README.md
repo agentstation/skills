@@ -28,8 +28,8 @@ keeps remote pull-request CI. A repository value overrides a workspace value.
 
 Without `pr.promoted`, the skill runs the plain gate: rebase, static check,
 affected tests, drills, autoreview and the pull request. The batch rules do not
-apply. The batch rules are the red stop, "run now", the sign-off check, the
-hotfix path and the merge-back.
+apply. The batch rules are the red stop, the base check, "run now", the
+sign-off check, the hotfix path and the merge-back.
 
 This example configures a batch model with a `develop` base and a promoted
 `main`:
@@ -68,7 +68,8 @@ the gate in order:
 7. Run `gh pr create --base develop`.
 
 A hotfix, a merge-back and a sign-off have their own sections in
-[`SKILL.md`](SKILL.md).
+[`SKILL.md`](SKILL.md). An agent merges only to the pull-request base. A person
+with merge authority merges each hotfix pull request to the promoted branch.
 
 ## Worked case: a Dependabot security update
 
@@ -105,9 +106,11 @@ base `main`. The repository orchestrator session owns it.
    gh issue list --label ci-batch-red --state open --json number --jq length
    ```
 
-5. Merge the pull request to `develop` with the repository merge method:
+5. Make sure that the base is `develop`. Then merge the pull request with the
+   repository merge method:
 
    ```bash
+   gh pr view 412 --json baseRefName --jq .baseRefName
    gh pr merge 412 --merge
    ```
 

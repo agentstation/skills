@@ -31,7 +31,7 @@ is one list item:
 | `pr.check` | Yes | The static check command. |
 | `pr.test` | Yes | The command that runs the tests that the change affects. |
 | `pr.drills` | No | A drill selector command, or `<path>: <command>` items. |
-| `pr.promoted` | No | The branch that only the batch run moves, for example `main`. |
+| `pr.promoted` | No | The branch that the batch run and hotfix merges move, for example `main`. |
 | `pr.run-now` | Batch | The command that starts a batch run now. |
 | `pr.ci-workflow` | No | The CI workflow file. The default is `ci.yml`. |
 | `pr.red-label` | No | The red-batch issue label. The default is `ci-batch-red`. |
@@ -43,7 +43,8 @@ is one list item:
   command.
 - The batch rules apply when `pr.promoted` has a value other than `pr.base`.
   Without that value, run only the [gate](#gate) and skip each batch rule.
-  The batch rules are the red stop, "run now", sign-off, hotfix, and merge-back.
+  The batch rules are the red stop, the base check, "run now", sign-off,
+  hotfix, and merge-back.
 - In this file, `<base>` is the value of `pr.base`, and `<promoted>` is the
   value of `pr.promoted`.
 
@@ -104,10 +105,10 @@ is one list item:
 
    `gh pr create` takes the bare branch name. Autoreview takes
    `origin/<base>`.
-10. When the batch rules apply, run `pr.run-now` after the merge of a
-    one-way-door change. A one-way-door change is a change that a revert
-    cannot undo. Examples are a data migration, a wire or storage format
-    change, and an external write.
+10. When the batch rules apply, apply the [base check](#base-check) before the
+    merge. Run `pr.run-now` after the merge of a one-way-door change. A
+    one-way-door change is a change that a revert cannot undo. Examples are a
+    data migration, a wire or storage format change, and an external write.
 
 Use the installed `gh` skill for `gh` output, pagination, and repository
 targeting.
@@ -146,6 +147,22 @@ Use the `pr.red-label` value when the repository sets one.
 - The merge-back pull request is exempt. The batch run does not promote before
   the merge-back lands, so a stop would also block the fix.
 
+## Base check
+
+When the batch rules apply, an agent merges a pull request only to `<base>`.
+Before each `gh pr merge <n>`, run:
+
+```bash
+gh pr view <n> --json baseRefName --jq .baseRefName
+```
+
+- Merge only when the output equals `<base>`.
+- If the command fails or prints another branch, do not merge. Report the pull
+  request and its base.
+- Do not use the admin bypass. GitHub can apply the bypass to an admin merge
+  with no `--admin` flag, so the base check is the guard.
+- A person with merge authority merges each pull request to `<promoted>`.
+
 ## Dependabot
 
 The orchestrator session of each repository owns its Dependabot pull requests.
@@ -175,8 +192,8 @@ The orchestrator session of each repository owns its Dependabot pull requests.
    ```
 
 4. Apply the red stop. While a red batch issue is open, do not merge.
-5. Merge to the base with the repository merge method. The batch run tests the
-   change on a runner.
+5. Apply the [base check](#base-check). Then merge to the base with the
+   repository merge method. The batch run tests the change on a runner.
 
 ## Sign-off
 
@@ -186,17 +203,21 @@ contains the commit". Before you write that phrase for a commit, run:
 ```bash
 git fetch origin <promoted>
 git merge-base --is-ancestor <sha> origin/<promoted>
-gh issue list --label ci-main-audit --state open --json number --jq length
+gh issue list --label ci-main-audit --state open --json title --jq '[.[]|select(.title|startswith("main audit: workflow change")|not)]|length'
 ```
 
 The condition holds only when `merge-base --is-ancestor` exits 0 and the issue
-count is `0`. Use the `pr.audit-label` value when the repository sets one. A
-`promoted: <sha>` line in a run summary is not evidence.
+count is `0`. The count ignores a workflow change issue, which reports a
+workflow edit for review and not an outside update. Use the `pr.audit-label`
+value when the repository sets one. A `promoted: <sha>` line in a run summary
+is not evidence.
 
 ## Hotfix
 
 A hotfix goes on top of the promoted branch. It does not start from a release
-tag.
+tag. A green hotfix does not go to `<promoted>` automatically. A person with
+merge authority merges the hotfix pull request with a merge commit. The agent
+never merges it.
 
 1. Branch from the promoted tip:
 
@@ -213,33 +234,49 @@ tag.
    ```
 
 3. Push with `git push origin HEAD:refs/heads/hotfix/<name>`.
-4. Open a draft record pull request with the autoreview output in its body:
+4. Open a ready pull request to the promoted branch, with the autoreview output
+   in its body:
 
    ```bash
-   gh pr create --draft --base <promoted> --head hotfix/<name> --title "<title>" --body-file <file>
+   gh pr create --base <promoted> --head hotfix/<name> --title "<title>" --body-file <file>
    ```
 
-   Do not merge or close the record pull request. The batch audit uses it as
-   evidence for the hotfix update of `<promoted>`.
 5. Start the CI workflow on the branch and watch it. A red `hotfix/*` run gets
    no retry and no issue:
 
    ```bash
    gh workflow run ci.yml --ref hotfix/<name>
-   gh run list --workflow ci.yml --branch hotfix/<name> --event workflow_dispatch -L 1 --json databaseId,headSha,status
+   gh run list --workflow ci.yml --branch hotfix/<name> --event workflow_dispatch -L 1 --json databaseId,headSha,status,url
    gh run watch <run-id> --exit-status
    ```
 
    Use the `pr.ci-workflow` value when the repository sets one. If the run is
    red, fix the branch, run the gate again, push, and start a new run.
-6. Confirm the promotion with the [sign-off](#sign-off) commands for the hotfix
-   commit.
-7. Do the [merge-back](#merge-back).
+6. Make sure that the green run tested the merge result. The run `headSha`
+   must equal the pull-request head. The promoted tip must be an ancestor of
+   that head:
+
+   ```bash
+   gh pr view <n> --json headRefOid --jq .headRefOid
+   git fetch origin <promoted>
+   git merge-base --is-ancestor origin/<promoted> <head-sha>
+   ```
+
+   If `<promoted>` moved, merge `origin/<promoted>` into the hotfix branch.
+   Then run gate steps 3 to 5 with `origin/<promoted>` as the base, push, and
+   start a new run. Do not push after the green run.
+7. Ask the person with merge authority to merge the pull request with a merge
+   commit. Give the run URL and the head SHA. The batch audit checks the merge
+   commit. Its second parent must be the tested head, and its tree must equal
+   the head tree.
+8. After the merge, confirm the hotfix head with the [sign-off](#sign-off)
+   commands.
+9. Do the [merge-back](#merge-back).
 
 ## Merge-back
 
-After a hotfix promotion, `<promoted>` holds commits that `<base>` does not
-hold. The batch run skips until `<base>` contains the promoted tip.
+After a hotfix merge, `<promoted>` holds commits that `<base>` does not hold.
+The batch run skips until `<base>` contains the promoted tip.
 
 1. Make the merge-back branch at the promoted tip:
 
@@ -250,10 +287,12 @@ hold. The batch run skips until `<base>` contains the promoted tip.
    git push origin "HEAD:refs/heads/merge/<promoted>-$sha"
    ```
 
-2. Open a pull request to the base. Do not rebase and do not squash:
+2. Open a pull request to the base. Apply the [base check](#base-check), then
+   merge. Do not rebase and do not squash:
 
    ```bash
    gh pr create --base <base> --head "merge/<promoted>-$sha" --title "<title>" --body-file <file>
+   gh pr view <n> --json baseRefName --jq .baseRefName
    gh pr merge <n> --merge
    ```
 
