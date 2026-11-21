@@ -71,8 +71,20 @@ is one list item:
    ```
 
    Always pass `--base`. Without it and before a pull request exists, the
-   helper reviews against `origin/main`. Follow the installed `autoreview`
-   skill for findings. After a fix, commit it and run steps 3 to 5 again.
+   helper reviews against `origin/main`.
+
+   Every change gets a model review. If the gate prints `autoreview skipped`,
+   run the manual branch review on the same diff:
+
+   ```bash
+   "$AUTOREVIEW" --mode branch --base origin/<base>
+   ```
+
+   The gate skips a diff with no substantive code path, for example a change
+   to workflows, configuration, manifests, lock files, or documentation.
+   Record in the pull-request body which mode ran. Follow the installed
+   `autoreview` skill for findings. After a fix, commit it and run steps 3 to
+   5 again.
 6. Write the pull-request body. Use the [body form](#pull-request-body).
 7. Apply the [red stop](#red-stop) when the batch rules apply.
 8. Push with an explicit refspec:
@@ -105,8 +117,9 @@ targeting.
 The body has three sections:
 
 - **Summary:** what changes and why.
-- **Evidence:** each gate command and its result, the test counts, the drills
-  that ran, and the autoreview result.
+- **Evidence:** each gate command and its result, the test counts, and the
+  drills that ran. List the autoreview mode and its result. The mode is the
+  pre-PR gate or the manual branch review.
 - **Merge danger:** what breaks if the change is wrong, whether the change is a
   one-way door, and the rollback.
 
@@ -152,8 +165,9 @@ The orchestrator session of each repository owns its Dependabot pull requests.
    gh pr checkout <n>
    ```
 
-3. Run autoreview on the diff only. The pre-PR gate skips a diff with only
-   manifests and lock files, so use the manual branch mode:
+3. Run autoreview on the diff only. A Dependabot diff holds only manifests,
+   lock files, or workflows. The pre-PR gate skips it, so run the manual branch
+   review directly:
 
    ```bash
    git fetch origin <base>
@@ -191,7 +205,8 @@ tag.
    git switch -c hotfix/<name> origin/<promoted>
    ```
 
-2. Run the [gate](#gate) steps 1 to 6 with `origin/<promoted>` as the base:
+2. Run the [gate](#gate) steps 1 to 6 with `origin/<promoted>` as the base.
+   The manual review rule of step 5 applies:
 
    ```bash
    "$AUTOREVIEW" --gate pre-pr --mode auto --base origin/<promoted>

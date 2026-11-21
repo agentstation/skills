@@ -56,8 +56,12 @@ the gate in order:
 
 1. Rebase on `origin/develop`.
 2. Run `pr.check`, `pr.test` and the drills.
-3. Run `autoreview --gate pre-pr --mode auto --base origin/develop`.
-4. Write the body with a summary, the evidence and the merge danger.
+3. Run `autoreview --gate pre-pr --mode auto --base origin/develop`. If the
+   gate skips a diff with no code path, run
+   `autoreview --mode branch --base origin/develop`. Every change gets a model
+   review.
+4. Write the body with a summary, the evidence and the merge danger. The
+   evidence names the autoreview mode that ran.
 5. Refuse when a `ci-batch-red` issue is open, unless the change is a revert
    or fix that names the issue.
 6. Push with `git push origin HEAD:refs/heads/<branch>`.
