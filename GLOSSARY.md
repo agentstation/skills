@@ -28,6 +28,7 @@
 | MCP | Model Context Protocol, which connects an AI application to external tools and data. | | Approved | `autoreview/SKILL.md` |
 | OpenCode | A coding-agent CLI that autoreview can use as an isolated review harness. | | Approved | `autoreview/SKILL.md` |
 | plans | The skill identifier for the AgentStation durable-plan system. | | Approved | `plans/SKILL.md` |
+| pr | The skill identifier for the AgentStation local pull-request gate. | | Approved | `pr/SKILL.md` |
 | pre-PR gate | The autoreview gate that runs before authors publish or update a pull request. | | Approved | `autoreview/SKILL.md` |
 | project glossary | The repository-level `GLOSSARY.md` file that defines approved technical terms. | terminology list | Approved | `technical-writing/references/glossary.md` |
 | proof root | The directory beside a plan that holds its evidence artifacts, one file per task. | | Approved | `plans/references/structure.md` |

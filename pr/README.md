@@ -82,6 +82,7 @@ base `main`. The repository orchestrator session owns it.
 
    ```bash
    export AUTOREVIEW="${AGENTS_HOME:-$HOME/.agents}/skills/autoreview/scripts/autoreview"
+   git fetch origin develop
    "$AUTOREVIEW" --mode branch --base origin/develop
    ```
 

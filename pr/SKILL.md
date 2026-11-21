@@ -154,6 +154,7 @@ The orchestrator session of each repository owns its Dependabot pull requests.
    manifests and lock files, so use the manual branch mode:
 
    ```bash
+   git fetch origin <base>
    "$AUTOREVIEW" --mode branch --base origin/<base>
    ```
 
