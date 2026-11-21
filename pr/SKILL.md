@@ -31,7 +31,7 @@ is one list item:
 | `pr.check` | Yes | The static check command. |
 | `pr.test` | Yes | The command that runs the tests that the change affects. |
 | `pr.drills` | No | A drill selector command, or `<path>: <command>` items. |
-| `pr.promoted` | No | The branch that only the batch run moves, for example `main`. |
+| `pr.promoted` | No | The branch that the batch run and hotfix merges move, for example `main`. |
 | `pr.run-now` | Batch | The command that starts a batch run now. |
 | `pr.ci-workflow` | No | The CI workflow file. The default is `ci.yml`. |
 | `pr.red-label` | No | The red-batch issue label. The default is `ci-batch-red`. |
@@ -263,7 +263,8 @@ never merges it.
    ```
 
    If `<promoted>` moved, merge `origin/<promoted>` into the hotfix branch.
-   Then run gate steps 3 to 5, push, and start a new run. Do not push after
+   Then run gate steps 3 to 5 with `origin/<promoted>` as the base, push, and
+   start a new run. Do not push after
    the green run.
 7. Ask the person with merge authority to merge the pull request with a merge
    commit. Give the run URL and the head SHA. The batch audit checks the merge
@@ -275,8 +276,7 @@ never merges it.
 
 ## Merge-back
 
-After a hotfix promotion, `<promoted>` holds commits that `<base>` does not
-hold. The batch run skips until `<base>` contains the promoted tip.
+After a hotfix merge, `<promoted>` holds commits that `<base>` does not hold. The batch run skips until `<base>` contains the promoted tip.
 
 1. Make the merge-back branch at the promoted tip:
 
