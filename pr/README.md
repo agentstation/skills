@@ -21,9 +21,18 @@ The gate uses the GitHub CLI (`gh`) and the `autoreview` skill.
 
 ## Configure a repository
 
-Add the `pr.*` keys to the repository `AGENTS.md` or to the workspace
-`AGENTS.md`. A repository value overrides a workspace value. This example
-configures a batch model with a `develop` base and a promoted `main`:
+Put the `pr.*` keys in the repository `AGENTS.md`. Use the workspace
+`AGENTS.md` only when every repository in the workspace uses the same model. A
+workspace value applies to each repository below it, also to a repository that
+keeps remote pull-request CI. A repository value overrides a workspace value.
+
+Without `pr.promoted`, the skill runs the plain gate: rebase, static check,
+affected tests, drills, autoreview and the pull request. The batch rules do not
+apply. The batch rules are the red stop, "run now", the sign-off check, the
+hotfix path and the merge-back.
+
+This example configures a batch model with a `develop` base and a promoted
+`main`:
 
 ```markdown
 ## Pull requests

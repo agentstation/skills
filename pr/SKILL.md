@@ -42,6 +42,7 @@ is one list item:
 - If a required key has no value, stop and report the key. Do not guess a
   command.
 - The batch rules apply when `pr.promoted` has a value other than `pr.base`.
+  Without that value, run only the [gate](#gate) and skip each batch rule.
   The batch rules are the red stop, "run now", sign-off, hotfix, and merge-back.
 - In this file, `<base>` is the value of `pr.base`, and `<promoted>` is the
   value of `pr.promoted`.
@@ -91,9 +92,10 @@ is one list item:
 
    `gh pr create` takes the bare branch name. Autoreview takes
    `origin/<base>`.
-10. After the merge of a one-way-door change, run `pr.run-now`. A one-way-door
-    change is a change that a revert cannot undo. Examples are a data
-    migration, a wire or storage format change, and an external write.
+10. When the batch rules apply, run `pr.run-now` after the merge of a
+    one-way-door change. A one-way-door change is a change that a revert
+    cannot undo. Examples are a data migration, a wire or storage format
+    change, and an external write.
 
 Use the installed `gh` skill for `gh` output, pagination, and repository
 targeting.
